@@ -96,6 +96,25 @@ public:
         return sqrt(result);
     }
 
+    Matrix TensorProduct(const Vector &other) const {
+        std::array<std::array<double, 3>, 3> result;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result[i][j] = data_[i] * other.data_[j];
+            }
+        }
+        return Matrix(result);
+    }
+
+    Vector CrossProduct(const Vector &other) const {
+        std::array<double, 3> result;
+        result[0] = data_[1]*other.data_[2] - data_[2]*other.data_[1];
+        result[1] = data_[2]*other.data_[0] - data_[0]*other.data_[2];
+        result[2] = data_[0]*other.data_[1] - data_[1]*other.data_[0];
+        return Vector(result);
+    }
+
+
 private:
     std::array<double, 3> data_;
 };
@@ -103,6 +122,109 @@ private:
 Vector operator*(double scalar, const Vector &vec) {
     return vec * scalar;
 }
+
+
+class Matrix {
+
+public:
+
+    Matrix() :
+        data_()
+    {}
+
+    Matrix(std::array<double, 3> row_x, std::array<double, 3> row_y, std::array<double, 3> row_z) :
+        data_{row_x, row_y, row_z}
+    {}
+
+    Matrix(const Matrix &other) :
+        data_(other.GetData())
+    {}
+
+    Matrix(std::array<std::array<double, 3>, 3> data):
+        data_(data)
+    {}
+
+    std::array<std::array<double, 3>, 3> GetData() const {
+        return data_;
+    }
+
+    std::array<double, 3> GetXRow() const {
+        return data_[0];
+    }
+
+    std::array<double, 3> GetYRow() const {
+        return data_[1];
+    }
+
+    std::array<double, 3> GetZRow() const {
+        return data_[2];
+    }
+
+    void operator=(const Matrix &other) {
+        data_ = other.data_;
+    }
+
+    Matrix operator+(const Matrix &other) const {
+        std::array<std::array<double, 3>, 3> result;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result[i][j] = data_[i][j] + other.data_[i][j];
+            }
+        }
+        return Matrix(result);
+    }
+
+    Matrix operator-(const Matrix &other) const {
+        std::array<std::array<double, 3>, 3> result;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result[i][j] = data_[i][j] - other.data_[i][j];
+            }
+        }
+        return Matrix(result);
+    }
+
+    Vector operator*(const Vector &other) const {
+        std::array<double, 3> result = {0.0, 0.0, 0.0};
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result[i] += data_[i][j] * other.GetData()[j];
+            }
+        }
+        return Vector(result);
+    }
+
+    Matrix operator*(double scalar) const {
+        std::array<std::array<double, 3>, 3> result;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result[i][j] = data_[i][j] * scalar;
+            }
+        }
+        return Matrix(result);
+    }
+
+    Matrix operator/(double scalar) const {
+        std::array<std::array<double, 3>, 3> result;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                result[i][j] = data_[i][j] / scalar;
+            }
+        }
+        return Matrix(result);
+    }
+
+
+private:
+    std::array<std::array<double, 3>, 3> data_;
+};
+
+
+
+
+
+
+
 
 
 
