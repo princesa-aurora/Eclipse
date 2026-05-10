@@ -11,19 +11,19 @@
 //#include <include/matplotlibcpp.h>
 //namespace plt = matplotlibcpp;
 
-const int N = 4; // number of bodies in the system
+const int N = 10; // number of bodies in the system
 
 using VectorArray = Array<Vector, N>;
 using ScalarArray = Array<double, N>;
 
-double t0 = t0_mjdtdb;
-VectorArray x0 = std::array{x0_sun, x0_earth, x0_moon, x0_jupiter};
-VectorArray p0 = std::array{p0_sun, p0_earth, p0_moon, p0_jupiter};
-ScalarArray M = std::array{M_sun, M_earth, M_moon, M_jupiter};
-ScalarArray GM = std::array{GM_sun, GM_earth, GM_moon, GM_jupiter};
+double t0 = 0.0; // seconds since J2000.0 epoch
+VectorArray x0 = std::array{x0_sun, x0_earth, x0_moon, x0_mercury, x0_venus, x0_mars, x0_jupiter, x0_saturn, x0_uranus, x0_neptune};
+VectorArray p0 = std::array{p0_sun, p0_earth, p0_moon, p0_mercury, p0_venus, p0_mars, p0_jupiter, p0_saturn, p0_uranus, p0_neptune};
+ScalarArray M = std::array{M_sun, M_earth, M_moon, M_mercury, M_venus, M_mars, M_jupiter, M_saturn, M_uranus, M_neptune};
+ScalarArray GM = std::array{GM_sun, GM_earth, GM_moon, GM_mercury, GM_venus, GM_mars, GM_jupiter, GM_saturn, GM_uranus, GM_neptune};
 
 double dt = 60.0;
-double T = 200.0 * 365.25 * 24 * 60 * 60;
+double T = 50.0 * 365.25 * 24 * 60 * 60;
 int K = T/dt;
 
 
@@ -80,11 +80,11 @@ int main() {
         solar_eclipse = eclipsed(pos.at(0), R_sun, pos.at(2), R_moon, pos.at(1), R_earth);
 
         if (lunar_eclipse && !lunar_eclipse_active) {
-            std::cout << "detected lunar eclipse start at time " << mjdtdb_to_utc_date(t/86400.0) << " seconds." << std::endl;
+            std::cout << "detected lunar eclipse start at time " << j2000_to_utc_date(t) << "."<< std::endl;
         }
         if (!lunar_eclipse && lunar_eclipse_active) {
-            std::cout << "detected lunar eclipse maximum at time " << mjdtdb_to_utc_date(lunar_eclipse_max_t/86400.0) << " with occultation " << int(lunar_eclipse_max_ratio*1000)/10.0 << "%." << std::endl;
-            std::cout << "detected lunar eclipse end at time " << mjdtdb_to_utc_date(t/86400.0) << " seconds." << "\n" << std::endl;
+            std::cout << "detected lunar eclipse maximum at time " << j2000_to_utc_date(lunar_eclipse_max_t) << " with occultation " << int(lunar_eclipse_max_ratio*1000)/10.0 << "%." << std::endl;
+            std::cout << "detected lunar eclipse end at time " << j2000_to_utc_date(t) << "." << "\n" << std::endl;
             lunar_eclipse_max_ratio = 0.0;
         }
         lunar_eclipse_active = lunar_eclipse;
@@ -99,11 +99,11 @@ int main() {
         }
 
         if (solar_eclipse && !solar_eclipse_active) {
-            std::cout << "detected solar eclipse start at time " << mjdtdb_to_utc_date(t/86400.0) << " seconds." << std::endl;
+            std::cout << "detected solar eclipse start at time " << j2000_to_utc_date(t) << "." << std::endl;
         }
         if (!solar_eclipse && solar_eclipse_active) {
-            std::cout << "detected solar eclipse maximum at time " << mjdtdb_to_utc_date(solar_eclipse_max_t/86400.0) << " with occultation " << int(solar_eclipse_max_ratio*1000)/10.0 << "%." << std::endl;
-            std::cout << "detected solar eclipse end at time " << mjdtdb_to_utc_date(t/86400.0) << " seconds." << "\n" << std::endl;
+            std::cout << "detected solar eclipse maximum at time " << j2000_to_utc_date(solar_eclipse_max_t) << " with occultation " << int(solar_eclipse_max_ratio*1000)/10.0 << "%." << std::endl;
+            std::cout << "detected solar eclipse end at time " << j2000_to_utc_date(t) << "." << "\n" << std::endl;
             solar_eclipse_max_ratio = 0.0;
         }
         solar_eclipse_active = solar_eclipse;

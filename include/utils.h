@@ -263,17 +263,11 @@ bool eclipsed(const Vector &x0, double R0, const Vector &x1, double R1, const Ve
 }
 
 
-std::string mjdtdb_to_utc_date(double mjdtdb) {
-    // convert Modified Julian Date (days) in TDB to a UTC date string
+std::string jdtt_to_utc_date(double jdtt) {
+    // convert Modified Julian Date (days) in TTT to a UTC date string
 
-    double tdb = mjdtdb + 2400000.5; // convert MJD to JD
-    double tdb_int = floor(tdb); // split into integer
-    double tdb_frac = tdb - tdb_int; // and fractional parts
-
-    // convert TDB to TT (Terrestrial Time)
-    double jdtt;
-    double tt_int, tt_frac;
-    eraTdbtt(tdb_int, tdb_frac, 0.0, &tt_int, &tt_frac); // dtr is actually not 0.0 but up to 3.3ms, which we shall ignore here
+    double tt_int = floor(jdtt); // split into integer
+    double tt_frac = jdtt - tt_int; // and fractional parts
 
     // convert TT to TAI (International Atomic Time)
     double tai_int, tai_frac;
@@ -294,11 +288,17 @@ std::string mjdtdb_to_utc_date(double mjdtdb) {
     int sec = day_fraction * 24*60*60 - hour*60*60 - minute*60;
 
     // format into date string and return
-    return std::to_string(day) + "/" + std::to_string(month) + "/" + std::to_string(year) + " " +
-           std::to_string(hour) + ":" + std::to_string(minute) + ":" + std::to_string(sec);
+    return std::to_string(day) + "." + std::to_string(month) + "." + std::to_string(year) + " " +
+           std::to_string(hour) + ":" + std::to_string(minute) + ":" + std::to_string(sec) + "UTC";
 }
 
+std::string j2000_to_utc_date(double j2000_seconds) {
+    // convert seconds since J2000 to a UTC date string
 
+    double jdtt = j2000_seconds/86400.0 + 2451545.0; // convert to Julian Days
+
+    return jdtt_to_utc_date(jdtt);
+}
 
 
 
