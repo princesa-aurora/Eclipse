@@ -10,31 +10,26 @@
 
 
 // Forest-Ruth 4th order symplectic integrator for N body system
-template<int N>
+template<size_t N>
 class Forest_Ruth {
-    using VectorArray = Array<Vector, N>;
 
 public:
     // constructor
     Forest_Ruth(
-        std::function<VectorArray(const VectorArray&, const VectorArray&)> x_dot,
-        std::function<VectorArray(const VectorArray&, const VectorArray&)> p_dot,
-        VectorArray x0,
-        VectorArray p0,
-        double t0,
-        bool save_results = true)
+        std::function<VectorArray<N>(const BodyArray<N>&)> x_dot,
+        std::function<VectorArray<N>(const BodyArray<N>&)> p_dot,
+        std::function<VectorArray<N>(const BodyArray<N>&)> orient_dot,
+        std::function<VectorArray<N>(const BodyArray<N>&)> L_dot,
+        BodyArray<N> initial,
+        double t0)
         :
         x_dot_(x_dot),
         p_dot_(p_dot),
-        x_(x0),
-        p_(p0),
-        t_(t0),
-        save_results_(save_results)
-    {
-        X_.push_back(x_);
-        P_.push_back(p_);
-        T_.push_back(t_);
-    }
+        orient_dot_(orient_dot),
+        L_dot_(L_dot),
+        bodies_(initial),
+        t_(t0)
+    {}
 
     // destructor
     ~Forest_Ruth() = default;
@@ -44,115 +39,65 @@ public:
         return t_;
     }
 
-    // get the last position
-    VectorArray GetCurrentPosition() const {
-        return x_;
-    }
-
-    // get the last momentum
-    VectorArray GetCurrentMomentum() const {
-        return p_;
-    }
-
-    // get all times
-    std::vector<double> GetTimes() const {
-        if (!save_results_) {
-            std::cerr << "Warning: GetTimes() called but save_results is false. Returning empty vector." << std::endl;
-        }
-        return T_;
-    }
-
-    // get all computed positions
-    std::vector<VectorArray> GetPositions() const {
-        if (!save_results_) {
-            std::cerr << "Warning: GetPositions() called but save_results is false. Returning empty vector." << std::endl;
-        }
-        return X_;
-    }
-
-    // get all computed momenta
-    std::vector<VectorArray> GetMomenta() const {
-        if (!save_results_) {
-            std::cerr << "Warning: GetMomenta() called but save_results is false. Returning empty vector." << std::endl;
-        }
-        return P_;
+    // get the current bodies
+    const Body& GetCurrentBody(unsigned idx) const {
+        return bodies_[idx];
     }
 
     // make a step of the Forest Ruth algorithm
     void MakeStep(double dt) {
+
         t_ += dt;
-        if (save_results_) {
-            T_.push_back(t_);
-        }
-
-        std::pair<VectorArray, VectorArray> step = ComputeForestRuthStep(dt, x_, p_, t_);
-        x_ = step.first;
-        p_ = step.second;
-        if (save_results_) {
-            X_.push_back(x_);
-            P_.push_back(p_);
-        }
-    }
-
-    // call a loop over MakeStep for K steps at a fixed width
-    void MakeSteps(double dt, unsigned int K) {
-        for (unsigned int k = 0; k < K; k++) {
-            MakeStep(dt);
-        }
-    }
-
-    // call a loop over MakeStep for a vector of widths
-    void MakeStepsVector(const std::vector<double> &dT) {
-        for (double dt : dT) {
-            MakeStep(dt);
-        }
+        ComputeForestRuthStep(dt, bodies_);
     }
 
 
 private:
     // function that gives x_dot(x, p)
-    std::function<VectorArray(const VectorArray&, const VectorArray&)> x_dot_;
+    std::function<VectorArray<N>(const BodyArray<N>&)> x_dot_;
     // function that gives p_dot(x, p)
-    std::function<VectorArray(const VectorArray, const VectorArray)> p_dot_;
-
-    // weather to save compuited values or not (set false for long integrations to avoid memory problems)
-    bool save_results_;
+    std::function<VectorArray<N>(const BodyArray<N>&)> p_dot_;
+    // function that gives orient_dot(x, p)
+    std::function<VectorArray<N>(const BodyArray<N>&)> orient_dot_;
+    // function that gives L_dot(x, p)
+    std::function<VectorArray<N>(const BodyArray<N>&)> L_dot_;
 
     // vector that stores the times for which values were calculated
     std::vector<double> T_;
-    // vector that stores the computed positions
-    std::vector<VectorArray> X_;
-    // vector that stores the computed momenta
-    std::vector<VectorArray> P_;
+    // vector that stores the computed bodies
+    std::vector<BodyArray<N>> Bodies_;
 
     // current time
     double t_;
-    // current position
-    VectorArray x_;
-    // current momentum
-    VectorArray p_;
+    // current bodies
+    BodyArray<N> bodies_;
 
     // algorithm constants
-    double c1 = 1/(2-pow(2, 1.0/3));
-    double c2 = 1-2*c1;
+    static constexpr double c1 = 1/(2-cbrt(2));
+    static constexpr double c2 = 1-2*c1;
 
     // compute a step of the Leapfrog algorithm
-    std::pair<VectorArray, VectorArray> ComputeLeapFrogStep(double dt, VectorArray x, VectorArray p, double t) const {
-        VectorArray p05 = p + dt/2 * p_dot_(x, p);
-        VectorArray x1 = x + dt * x_dot_(x, p05);
-        VectorArray p1 = p05 + dt/2 * p_dot_(x1, p05);
+    void ComputeLeapFrogStep(double dt, BodyArray<N> &bodies) {
 
-        return std::make_pair(x1, p1);
+        // step 1: update momenta by half a step
+        bodies.Incrementp(dt/2 * p_dot_(bodies));
+        bodies.IncrementL(dt/2 * L_dot_(bodies));
+
+        // step 2: update positions by a full step
+        bodies.Incrementx(dt * x_dot_(bodies));
+        bodies.Incrementorient(dt * orient_dot_(bodies));
+
+        // step 3: update momenta by another half a step
+        bodies.Incrementp(dt/2 * p_dot_(bodies));
+        bodies.IncrementL(dt/2 * L_dot_(bodies));
     }
 
     // compute a step of the Forest-Ruth algorithm
-    std::pair<VectorArray, VectorArray> ComputeForestRuthStep(double dt, VectorArray x, VectorArray p, double t) const {
+    void ComputeForestRuthStep(double dt, BodyArray<N> &bodies) {
 
-        std::pair<VectorArray, VectorArray> step1 = ComputeLeapFrogStep(c1*dt, x, p, t);
-        std::pair<VectorArray, VectorArray> step2 = ComputeLeapFrogStep(c2*dt, step1.first, step1.second, t);
-        std::pair<VectorArray, VectorArray> step3 = ComputeLeapFrogStep(c1*dt, step2.first, step2.second, t);
-
-        return step3;
+        ComputeLeapFrogStep(c1*dt, bodies);
+        ComputeLeapFrogStep(c2*dt, bodies);
+        ComputeLeapFrogStep(c1*dt, bodies);
     }
 
 };
