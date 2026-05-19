@@ -1,6 +1,7 @@
 #include <iostream>
 #include <functional>
 #include <vector>
+#include <chrono>
 
 #include <include/utils.h>
 #include <include/initial_conditions.h>
@@ -28,7 +29,7 @@ int main() {
         // position time derivative
         VectorArray<N> v;
         for (unsigned i = 0; i < N; i++) {
-            v[i] = bodies.Getv(i);
+            v.row(i) = bodies.Getv(i);
         }
         return v;
     };
@@ -36,12 +37,17 @@ int main() {
     std::function<VectorArray<N>(const BodyArray<N>&)> p_dot = [&](const BodyArray<N> &bodies)
     {
         // momentum time derivative
-        VectorArray<N> F;
+
+        //std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
+
+        VectorArray<N> F = VectorArray<N>::Zero();
         Vector f;
         Vector r_vec;
         double r;
         Vector e_r;
-        Matrix proj;
+        double r2_inv;
+        double ewxer;
+        double ewyer;
 
         for (unsigned i = 0; i < N; i++) {
             const Vector& x = bodies.Getx(i);
@@ -58,18 +64,23 @@ int main() {
                 const Vector ewy = bodies.GetAxis(j);
 
                 r_vec = y - x;
-                r = r_vec.Abs();
+                r = r_vec.norm();
                 e_r = r_vec /r;
-                proj = Identity - TensorProduct(e_r, e_r);
+                r2_inv = 1/(r*r);
+                ewxer = ewx.dot(e_r);
+                ewyer = ewy.dot(e_r);
 
-                f = PHYS_G*Mx*My/r/r *(e_r
-                    +3*J2x*(Rx*Rx/r/r)*(P2(ewx*e_r)*e_r - (ewx*e_r)*proj*ewx)
-                    +3*J2y*(Ry*Ry/r/r)*(P2(ewy*e_r)*e_r - (ewy*e_r)*proj*ewy));
+                f = PHYS_G*Mx*My*r2_inv *(e_r
+                    +3*J2x*(Rx*Rx*r2_inv)*((2.5*ewxer*ewxer - 0.5)*e_r - ewxer*ewx)
+                    +3*J2y*(Ry*Ry*r2_inv)*((2.5*ewyer*ewyer - 0.5)*e_r - ewyer*ewy));
 
-                F[i] += f;
-                F[j] -= f;
+                F.row(i) += f;
+                F.row(j) -= f;
             }
         }
+
+        //std::chrono::_V2::system_clock::time_point stop = std::chrono::high_resolution_clock::now();
+        //std::cout << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << std::endl;
 
         return F;
     };
@@ -80,7 +91,7 @@ int main() {
         // rotation angle time derivative
         VectorArray<N> w;
         for (unsigned i = 0; i < N; i++) {
-            w[i] = bodies.Getw(i);
+            w.row(i) = bodies.Getw(i);
         }
         return w;
     };
@@ -88,16 +99,21 @@ int main() {
     std::function<VectorArray<N>(const BodyArray<N>&)> L_dot = [&](const BodyArray<N> &bodies)
     {
         // angular momentum time derivative
-        VectorArray<N> Torque;
+
+        //std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
+
+        VectorArray<N> Torque = VectorArray<N>::Zero();
         Vector torque;
         Vector r_vec;
         double r;
         Vector e_r;
+        double r3_inv;
+        double ewer;
 
         for (unsigned i = 0; i < N; i++) {
             const Vector& x = bodies.Getx(i);
-            const double& alpha = bodies.Getorient(i)[1];
-            const double& delta = bodies.Getorient(i)[2];
+            const double& alpha = bodies.Getorient(i)(1);
+            const double& delta = bodies.Getorient(i)(2);
             const Vector& L = bodies.GetL(i);
             const double& Mx = bodies.GetM(i);
             const double& Ixy = bodies.GetIxy(i);
@@ -106,30 +122,36 @@ int main() {
             const double& J2 = bodies.GetJ2(i);
             const Vector ew = bodies.GetAxis(i);
 
-            const Vector ealpha{-sin(alpha), cos(alpha), 0.0};
-            const Vector edelta{-sin(delta)*cos(alpha), -sin(delta)*sin(alpha), cos(delta)};
+            const Vector ealpha(-sin(alpha), cos(alpha), 0.0);
+            const Vector edelta(-sin(delta)*cos(alpha), -sin(delta)*sin(alpha), cos(delta));
 
-            const Matrix I_inv_prime{{-2.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 0.0},
-                                     {-1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0},
-                                     {0.0, 0.0, 0.0}};
+            Matrix I_inv_prime;
+            I_inv_prime << -2.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 0.0,
+                           -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0,
+                            0.0, 0.0, 0.0;
 
-            for (unsigned j = 0; j < i; j++) {
+            for (unsigned j = 0; j < N; j++) {
+                if (j == i) {continue;}
                 const Vector& y = bodies.Getx(j);
                 const double& My = bodies.GetM(j);
 
                 r_vec = y - x;
-                r = r_vec.Abs();
+                r = r_vec.norm();
                 e_r = r_vec /r;
+                r3_inv = 1/(r*r*r);
+                ewer = ew.dot(e_r);
 
-                torque[0] = 0.0;
-                torque[1] = 3*PHYS_G*Mx*My/r/r/r*R*R*J2*(ew*e_r)*(ealpha*e_r)*cos(delta);
-                torque[2] = -1.0/2*L* (I_inv_prime *L)
-                            + 3*PHYS_G*Mx*My/r/r/r*R*R*J2*(ew*e_r)*(edelta*e_r);
+                torque(0) = 0.0;
+                torque(1) = 3*PHYS_G*Mx*My*r3_inv*R*R*J2*ewer*(ealpha.dot(e_r))*cos(delta);
+                torque(2) = -1.0/2*(I_inv_prime *L).dot(L)
+                            + 3*PHYS_G*Mx*My*r3_inv*R*R*J2*ewer*(edelta.dot(e_r));
 
-                Torque[i] += torque;
-                Torque[j] -= torque;
+                Torque.row(i) += torque;
             }
         }
+
+        //std::chrono::_V2::system_clock::time_point stop = std::chrono::high_resolution_clock::now();
+        //std::cout << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << std::endl;
 
         return Torque;
     };
