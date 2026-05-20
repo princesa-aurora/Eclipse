@@ -35,7 +35,7 @@ public:
     ~Forest_Ruth() = default;
 
     // get the last time
-    double GetCurrentTime() const {
+    const double& GetCurrentTime() const {
         return t_;
     }
 

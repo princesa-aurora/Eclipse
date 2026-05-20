@@ -2,14 +2,15 @@
 #include <functional>
 #include <vector>
 #include <chrono>
+#include <filesystem>
+#include <format>
 
 #include <include/utils.h>
 #include <include/initial_conditions.h>
 #include <include/solver.h>
 
-//#define WITHOUT_NUMPY
-//#include <include/matplotlibcpp.h>
-//namespace plt = matplotlibcpp;
+namespace fs = std::filesystem;
+
 
 const size_t N = 10; // number of bodies in the system
 
@@ -23,6 +24,12 @@ size_t K = T/dt;
 
 
 int main() {
+    // name and create output folder using a timestamp
+    std::string timestamp = std::format("{:%d.%m.%Y_%H:%M:%S}",
+                                        std::chrono::time_point_cast<std::chrono::seconds>(std::chrono::system_clock::now()));
+    fs::path folder = "/home/aurora/eclipse_data" / fs::path(timestamp);
+    fs::create_directory(folder);
+
 
     std::function<VectorArray<N>(const BodyArray<N>&)> x_dot = [&](const BodyArray<N> &bodies)
     {
@@ -157,92 +164,89 @@ int main() {
     };
 
 
-
+    // initialize solver
     Forest_Ruth<N> solver(x_dot, p_dot, orient_dot, L_dot, initial_bodies, t0);
 
-    double t = 0.0;
-    Vector x_sun;
-    Vector x_earth;
-    Vector x_moon;
-    bool lunar_eclipse = false;
-    bool solar_eclipse = false;
-    bool lunar_eclipse_active = false;
-    bool solar_eclipse_active = false;
-    double lunar_eclipse_ratio = 0.0;
-    double solar_eclipse_ratio = 0.0;
-    double lunar_eclipse_max_ratio = 0.0;
-    double solar_eclipse_max_ratio = 0.0;
-    double lunar_eclipse_max_t = 0.0;
-    double solar_eclipse_max_t = 0.0;
+    const double &t = solver.GetCurrentTime();
+    const Body &sun = solver.GetCurrentBody(0);
+    const Body &earth = solver.GetCurrentBody(1);
+    const Body &moon = solver.GetCurrentBody(2);
 
-    double RA_Erlangen = 11.0*M_PI/180;
-    double Dec_Erlangen = 49.6*M_PI/180;
-    double zenith;
-    bool day = true;
-    bool day_active = true;
+    fs::path filename;
+    bool solar_eclipse = false;
+    bool solar_eclipse_active = false;
+    double t_max = 0.0;
+    double dist;
+    double min_dist;
+    std::map<std::string, std::vector<double>> general_data;
+    std::array<std::vector<double>, 6> shadow_intersects;
+    std::array<std::vector<u_int64_t>, 3> offsets;
 
 
     std::cout << "Starting integration with dt = " << dt << " seconds for a total time of " << T << " seconds (" << T/60/60/24/365.25 << " years) (" << K << " steps)." << "\n" << std::endl;
 
+    // start integration loop
     for (size_t i = 0; i < K; i++) {
         solver.MakeStep(dt);
 
-        t = solver.GetCurrentTime();
-        x_sun = solver.GetCurrentBody(0).Getx();
-        x_earth = solver.GetCurrentBody(1).Getx();
-        x_moon = solver.GetCurrentBody(2).Getx();
-
-        lunar_eclipse = eclipsed(x_moon, R_moon, x_earth, R_earth, x_sun, R_sun);
-        solar_eclipse = eclipsed(x_sun, R_sun, x_moon, R_moon, x_earth, R_earth);
-
-        if (lunar_eclipse && !lunar_eclipse_active) {
-            std::cout << "detected lunar eclipse start at time " << j2000_to_utc_date(t) << "."<< std::endl;
-        }
-        if (!lunar_eclipse && lunar_eclipse_active) {
-            std::cout << "detected lunar eclipse maximum at time " << j2000_to_utc_date(lunar_eclipse_max_t) << " with occultation " << int(lunar_eclipse_max_ratio*1000)/10.0 << "%." << std::endl;
-            std::cout << "detected lunar eclipse end at time " << j2000_to_utc_date(t) << "." << "\n" << std::endl;
-            lunar_eclipse_max_ratio = 0.0;
-        }
-        lunar_eclipse_active = lunar_eclipse;
-
-        if (lunar_eclipse_active) {
-            lunar_eclipse_ratio = eclipse_ratio(x_moon, R_moon, x_earth, R_earth, x_sun, R_sun);
-
-            if (lunar_eclipse_ratio > lunar_eclipse_max_ratio) {
-                lunar_eclipse_max_ratio = lunar_eclipse_ratio;
-                lunar_eclipse_max_t = t;
-            }
-        }
+        solar_eclipse = eclipsed(sun, moon, earth);
 
         if (solar_eclipse && !solar_eclipse_active) {
-            std::cout << "detected solar eclipse start at time " << j2000_to_utc_date(t) << "." << std::endl;
+            std::cout << "detected solar eclipse start at time " << j2000_to_utc_datetime(t) << "." << std::endl;
+
+            filename = "solar_eclipse_of_" + j2000_to_utc_date(t_max);
+            for (unsigned i : {0, 1, 2}) { // start offsets with 0
+                offsets[i].push_back(0);
+            }
+
+            min_dist = INFINITY;
         }
         if (!solar_eclipse && solar_eclipse_active) {
-            std::cout << "detected solar eclipse maximum at time " << j2000_to_utc_date(solar_eclipse_max_t) << " with occultation " << int(solar_eclipse_max_ratio*1000)/10.0 << "%." << std::endl;
-            std::cout << "detected solar eclipse end at time " << j2000_to_utc_date(t) << "." << "\n" << std::endl;
-            solar_eclipse_max_ratio = 0.0;
+            std::cout << "detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << "." << std::endl;
+            std::cout << "detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
+
+            write_eclipse_to_NetCDF(folder / filename,
+                                    general_data,
+                                    shadow_intersects,
+                                    offsets);
+
+            general_data = {};
+            shadow_intersects = {};
+            offsets = {};
         }
         solar_eclipse_active = solar_eclipse;
 
-        if (solar_eclipse_active) {
-            solar_eclipse_ratio = eclipse_ratio(x_sun, R_sun, x_moon, R_moon, x_earth, R_earth);
+        if (solar_eclipse) {
+            // compute distance of sun-moon axis to earths center to check for maximum eclipse time
+            dist = compute_shadow_axis_distance_to_earth_center(earth, moon, sun);
+            if (dist < min_dist) {
+                min_dist = dist;
+                t_max = t;
+            }
 
-            if (solar_eclipse_ratio > solar_eclipse_max_ratio) {
-                solar_eclipse_max_ratio = solar_eclipse_ratio;
-                solar_eclipse_max_t = t;
+            // save time and suns RA and Dec
+            std::array<double, 3> sun_spherical= compute_spherical_seen_from_earth(sun, earth);
+            std::array<double, 3> moon_spherical= compute_spherical_seen_from_earth(moon, earth);
+            general_data["time"].push_back(t);
+            general_data["sun_r"].push_back(sun_spherical[0]);
+            general_data["sun_RA"].push_back(sun_spherical[1]);
+            general_data["sun_Dec"].push_back(sun_spherical[2]);
+            general_data["moon_r"].push_back(moon_spherical[0]);
+            general_data["moon_RA"].push_back(moon_spherical[1]);
+            general_data["moon_Dec"].push_back(moon_spherical[2]);
+
+            // compute shadow intersections with earth and save
+            std::array<std::vector<double>, 6> new_shadow_intersects = compute_shadow_earth_intersection(earth, moon, sun);
+            for (unsigned i : {0, 1, 2, 3, 4, 5}) {
+                shadow_intersects[i].insert(shadow_intersects[i].end(), new_shadow_intersects[i].begin(), new_shadow_intersects[i].end());
+            }
+            for (unsigned i : {0, 1, 2}) {
+                offsets[i].push_back(shadow_intersects[2*i].size());
             }
         }
 
-        zenith = sun_zenith(RA_Erlangen, Dec_Erlangen, solver.GetCurrentBody(1), solver.GetCurrentBody(0));
-        day = (zenith > 0.0);
 
-        if (day && !day_active) {
-            std::cout << "Erlangen, Germany: sunrise detected at time " << j2000_to_utc_date(t) << ".\n" << std::endl;
-        }
-        if (!day && day_active) {
-            std::cout << "Erlangen, Germany: sunset detected at time " << j2000_to_utc_date(t) << ".\n" << std::endl;
-        }
-        day_active = day;
+
 
     }
 
