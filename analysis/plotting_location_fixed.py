@@ -6,11 +6,10 @@ import xarray as xr
 import PIL
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-from scipy.spatial import KDTree
-from astropy.time import Time
-import astropy.units as u
 from tqdm import tqdm
 import imageio
+
+from utils import *
 
 
 file_path = "/home/aurora/eclipse_data/22.05.2026_20:12:50/solar_eclipse_of_5.2.2000.nc"
@@ -19,15 +18,6 @@ anim_path = "/home/aurora/eclipse_data/22.05.2000_south_pole_fixed.mp4"
 # specify location to be kept fixed
 center_lon_deg = 0
 center_lat_deg = -90
-
-
-def j2000_to_utc_datetime(j2000_seconds) :
-
-    j2000_epoch = Time('J2000.0', scale='tt')
-    time_tt = j2000_epoch + j2000_seconds * u.s
-    time_utc = time_tt.utc
-
-    return time_utc.strftime("%d.%m.%Y %H:%M:%S")
 
 
 
@@ -46,20 +36,12 @@ occultation_data = dataset["occultation_data"].values
 
 dataset.close()
 
-x_grid = np.column_stack((np.cos(lat_grid) * np.cos(lon_grid),
-                                np.cos(lat_grid) * np.sin(lon_grid),
-                                np.sin(lat_grid)))
-
 
 lon_mesh, lat_mesh = np.meshgrid(np.linspace(-np.pi, np.pi, 2000), np.linspace(np.pi/2, -np.pi/2, 1000))
 
-x_mesh = np.stack((np.cos(lat_mesh) * np.cos(lon_mesh),
-                np.cos(lat_mesh) * np.sin(lon_mesh),
-                np.sin(lat_mesh)), axis=2)
-
-# setup "nearest" interpolation
-tree = KDTree(x_grid)
-_, nearest_idcs = tree.query(x_mesh, k=1)
+# setup type "nearest" interpolation
+nearest_idcs = get_nearest_idcs(lon_grid, lat_grid,
+                                lon_mesh, lat_mesh, k=1)
 
 
 # load background image of earth
