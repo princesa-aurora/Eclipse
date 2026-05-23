@@ -464,10 +464,10 @@ std::string j2000_to_utc_date(double j2000_seconds) {
 
 
 
-double compute_sun_zenith(double RA, double Dec, const Body &earth, const Body &sun) {
-    // at RA, Dec on earths surface what is the zenith of the sun?
+double compute_sun_zenith(double lon, double lat, const Body &earth, const Body &sun) {
+    // at lon, lat on earths surface what is the zenith of the sun?
 
-    Vector pos_on_earth(cos(Dec)*cos(RA), cos(Dec)*sin(RA), sin(Dec));
+    Vector pos_on_earth(cos(lat)*cos(lon), cos(lat)*sin(lon), sin(lat));
     Matrix RotMat_earth = earth.GetRotMat();
     pos_on_earth = RotMat_earth *pos_on_earth; // rotate from terrestrial frame to ICRF
 
@@ -478,17 +478,17 @@ double compute_sun_zenith(double RA, double Dec, const Body &earth, const Body &
 }
 
 std::array<double, 3> compute_spherical_seen_from_earth(const Body &body, const Body &earth) {
-    // what is the bodies distance, RA and Dec as seen from the terrestrial frame?
+    // what is the bodies distance, lon and lat as seen from the terrestrial frame?
 
     Vector r = body.Getx() - earth.Getx();
     Matrix RotMat_inv_earth = earth.GetRotMat().transpose();
     r = RotMat_inv_earth *r; // rotate from ICRF to terrestrial frame
 
     double dist = r.norm();
-    double RA = atan2(r(1), r(0));
-    double Dec = atan(r(2)/sqrt(r(0)*r(0) + r(1)*r(1)));
+    double lon = atan2(r(1), r(0));
+    double lat = atan(r(2)/sqrt(r(0)*r(0) + r(1)*r(1)));
 
-    return {dist, RA, Dec};
+    return {dist, lon, lat};
 }
 
 double compute_shadow_axis_distance_to_earth_center(const Body &earth, const Body &moon, const Body &sun) {
@@ -504,11 +504,85 @@ double compute_shadow_axis_distance_to_earth_center(const Body &earth, const Bod
     return sqrt(dist2);
 }
 
+double acos_continued(double x) {
+    // extend the acos function by setting it to 0 for x>1 and pi for x>-1
+    if (x > 1.0) {return 0.0;}
+    else if (x < -1.0) {return M_PI;}
+    else {return acos(x);}
+}
+
+double disks_intersection_area(double R1, double R2, double d) {
+    // what is the intersection area of two disks (one with radius R1 and the other with R2)
+    // whose centers are separated by a distance d?
+
+    double Z = (R1*R1-R2*R2+d*d)/2/d;
+    double angle1 = acos_continued(Z/R1);
+    double angle2 = acos_continued((d-Z)/R2);
+
+    return R1*R1*(angle1 - sin(2*angle1)/2) + R2*R2*(angle2 - sin(2*angle2)/2);
+}
+
+
+template<size_t grid_size>
+std::array<double, grid_size> compute_local_occultations(const Body &earth, const Body &moon,  const Body &sun,
+                                                            std::array<double, grid_size> lon_grid, std::array<double, grid_size> lat_grid) {
+    // compute the occultation ratios of the sun at different points on the earth
+    // thereby ignore day and night, i.e. pretend that one can look through the earth and see the eclipse even though its night
+    // (this is just so darkness due to eclipse and darkness due to night are not mixed up)
+    const double& R_earth = earth.GetR();
+    const double& R_moon = moon.GetR();
+    const double& R_sun = sun.GetR();
+
+    const Vector& x_earth_ICRF = earth.Getx();
+    Vector x_moon = moon.Getx();
+    Vector x_sun = sun.Getx();
+
+    const Matrix RotMat_earth = earth.GetRotMat();
+
+    double A_sun = M_PI*R_sun*R_sun;
+
+    // shift ICRF center to earth (this just saves a tiny bit of vector additions later)
+    // x_earth = 0;
+    x_moon -= x_earth_ICRF;
+    x_sun -= x_earth_ICRF;
+
+    // loop over the lonitudes and latitudes and compute the respective occultation ratios
+    double lon, lat;
+    std::array<double, grid_size> occult_arr;
+    Vector x;
+    double d_sun, d_moon_parallel, d_moon_orthogonal;
+    Vector e_x_sun;
+    double R_moon_scaled, d_moon_scaled;
+
+    for (unsigned i = 0; i < grid_size; i++) {
+        lon = lon_grid[i];
+        lat = lat_grid[i];
+
+        // convert to position vector in earth-centered ICRF
+        x = RotMat_earth*R_earth*Vector(cos(lat)*cos(lon), cos(lat)*sin(lon), sin(lat));
+
+        d_sun = (x_sun-x).norm(); // distance from observation point to the sun
+        e_x_sun = (x_sun-x)/d_sun; // unit vector pointing from observation point to the sun
+
+        d_moon_parallel = (x_moon-x).dot(e_x_sun); // distance from observation point to the moon parallel to e_x_sun
+        d_moon_orthogonal = (x_moon-x - d_moon_parallel*e_x_sun).norm(); // distance from observation point to the moon orthogonal to e_x_sun
+
+        // scale moons radius and orthogonal distance to as if it were as far away as the sun
+        R_moon_scaled = R_moon *d_sun/d_moon_parallel;
+        d_moon_scaled = d_moon_orthogonal *d_sun/d_moon_parallel;
+
+        // compute intersection area of sun and scaled moon (both simplified to disks) and divide by sun area to get occultations
+        occult_arr[i] = disks_intersection_area(R_sun, R_moon_scaled, d_moon_scaled) /A_sun;
+    }
+
+    return occult_arr;
+}
+
 
 
 std::array<std::vector<double>, 6> compute_shadow_earth_intersection(const Body &earth, const Body &moon,  const Body &sun) {
     // compute the intersection curves between the umbra, antumbra and penumbra and the earths surface,
-    // save RA and DEC of the curve points in the terrestrial frame in netcdf
+    // save lon and lat of the curve points in the terrestrial frame in netcdf
     const double& R_earth = earth.GetR();
     const double& R_moon = moon.GetR();
     const double& R_sun = sun.GetR();
@@ -529,7 +603,7 @@ std::array<std::vector<double>, 6> compute_shadow_earth_intersection(const Body 
     double theta_moon = asin(x_moon(2)/r_moon);
     double phi_moon = atan2(x_moon(1), x_moon(0));
 
-    Matrix R_z; // rotate frame to align moon_to_sun with the z-axis
+    Matrix R_z; // rotate frame to align sun_to_moon with the z-axis
     R_z << 1 - cos(phi_moon)*cos(phi_moon)*(1.0-sin(theta_moon)), -cos(phi_moon)*sin(phi_moon)*(1.0-sin(theta_moon)), -cos(theta_moon)*cos(phi_moon),
                        -cos(phi_moon)*sin(phi_moon)*(1.0-sin(theta_moon)), 1 - sin(phi_moon)*sin(phi_moon)*(1.0-sin(theta_moon)), -cos(theta_moon)*sin(phi_moon),
                        cos(theta_moon)*cos(phi_moon), cos(theta_moon)*sin(phi_moon), sin(theta_moon);
@@ -556,16 +630,16 @@ std::array<std::vector<double>, 6> compute_shadow_earth_intersection(const Body 
     // sample from intersection of shadow cones with earth: r(t(beta), beta)
     // thereby exclude points located on the side of earth that is facing away from the sun (it's dark there anyways)
     // umbral and antumbral intersections are split as antumbral: (t(beta) > 0) and umbral: (t_umbral_moon < t(beta) < 0)
-    std::vector<double> umbral_RA;
-    std::vector<double> umbral_Dec;
-    std::vector<double> antumbral_RA;
-    std::vector<double> antumbral_Dec;
-    std::vector<double> penumbral_RA;
-    std::vector<double> penumbral_Dec;
+    std::vector<double> umbral_lon;
+    std::vector<double> umbral_lat;
+    std::vector<double> antumbral_lon;
+    std::vector<double> antumbral_lat;
+    std::vector<double> penumbral_lon;
+    std::vector<double> penumbral_lat;
     double beta;
     double a_mn, b_mn, c_mn, D_mn;
     Vector x;
-    double RA, Dec;
+    double lon, lat;
 
     unsigned K = 2000;
     for (unsigned k = 0; k < K; k++) {
@@ -583,27 +657,25 @@ std::array<std::vector<double>, 6> compute_shadow_earth_intersection(const Body 
             for (double t : {(-b_mn + sqrt(D_mn))/2/a_mn, (-b_mn - sqrt(D_mn))/2/a_mn}) {
                 x = Vector(t*A_umbral*cos(beta), t*A_umbral*sin(beta), t+z0_umbral);
 
-                if ((x-x_earth).dot(x_earth) < 0.0) { // facing toward the sun
-                    // undo all the previous transformations to get x in ICRF
-                    x = R_z.transpose()*x;
-                    x += x_sun_ICRF;
-                    // apply the inverse of earths rotation matrix to transform into the terrestrial frame
-                    x = RotMat_inv_earth*(x-x_earth_ICRF);
+                // undo all the previous transformations to get x in ICRF
+                x = R_z.transpose()*x;
+                x += x_sun_ICRF;
+                // apply the inverse of earths rotation matrix to transform into the terrestrial frame
+                x = RotMat_inv_earth*(x-x_earth_ICRF);
 
-                    // now extract RA and Dec
-                    RA = atan2(x(1), x(0));
-                    Dec = atan(x(2)/sqrt(x(0)*x(0)+x(1)*x(1)));
+                // now extract lon and lat
+                lon = atan2(x(1), x(0));
+                lat = atan(x(2)/sqrt(x(0)*x(0)+x(1)*x(1)));
 
-                    // save the results while distinguishing between antumbral (t > 0) and umbral (t_moon < t < 0) intersections,
-                    // if t < t_moon_umbral no eclipe happens, so don't save
-                    if (t > 0.0) {
-                        antumbral_RA.push_back(RA);
-                        antumbral_Dec.push_back(Dec);
-                    }
-                    else if (t > t_moon_umbral) {
-                        umbral_RA.push_back(RA);
-                        umbral_Dec.push_back(Dec);
-                    }
+                // save the results while distinguishing between antumbral (t > 0) and umbral (t_moon < t < 0) intersections,
+                // if t < t_moon_umbral no eclipe happens, so don't save
+                if (t > 0.0) {
+                    antumbral_lon.push_back(lon);
+                    antumbral_lat.push_back(lat);
+                }
+                else if (t > t_moon_umbral) {
+                    umbral_lon.push_back(lon);
+                    umbral_lat.push_back(lat);
                 }
             }
         }
@@ -620,37 +692,137 @@ std::array<std::vector<double>, 6> compute_shadow_earth_intersection(const Body 
             for (double t : {(-b_mn + sqrt(D_mn))/2/a_mn, (-b_mn - sqrt(D_mn))/2/a_mn}) {
                 x = Vector(t*A_penumbral*cos(beta), t*A_penumbral*sin(beta), t+z0_penumbral);
 
-                if ((x-x_earth).dot(x_earth) < 0.0) { // facing toward the sun
-                    // undo all the previous transformations to get x in ICRF
-                    x = R_z.transpose()*x;
-                    x += x_sun_ICRF;
-                    // apply the inverse of earths rotation matrix to transform into the terrestrial frame
-                    x = RotMat_inv_earth*(x-x_earth_ICRF);
+                // undo all the previous transformations to get x in ICRF
+                x = R_z.transpose()*x;
+                x += x_sun_ICRF;
+                // apply the inverse of earths rotation matrix to transform into the terrestrial frame
+                x = RotMat_inv_earth*(x-x_earth_ICRF);
 
-                    // now extract RA and Dec
-                    RA = atan2(x(1), x(0));
-                    Dec = atan(x(2)/sqrt(x(0)*x(0)+x(1)*x(1)));
+                // now extract lon and lat
+                lon = atan2(x(1), x(0));
+                lat = atan(x(2)/sqrt(x(0)*x(0)+x(1)*x(1)));
 
-                    // save the results
-                    // if t < t_moon_penumbral no eclipe happens, so don't save
-                    if (t > t_moon_penumbral) {
-                        penumbral_RA.push_back(RA);
-                        penumbral_Dec.push_back(Dec);
-                    }
+                // save the results
+                // if t < t_moon_penumbral no eclipe happens, so don't save
+                if (t > t_moon_penumbral) {
+                    penumbral_lon.push_back(lon);
+                    penumbral_lat.push_back(lat);
                 }
             }
         }
     }
 
-    return {umbral_RA, umbral_Dec, antumbral_RA, antumbral_Dec, penumbral_RA, penumbral_Dec};
+    return {umbral_lon, umbral_lat, antumbral_lon, antumbral_lat, penumbral_lon, penumbral_lat};
 }
 
 
 
-void write_eclipse_to_NetCDF(std::string file_path,
-                             const std::map<std::string, std::vector<double>> &general_data,
-                             const std::array<std::vector<double>, 6> &points,
-                             const std::array<std::vector<u_int64_t>, 3> &offsets)
+template<size_t grid_size, size_t general_size>
+class Eclipse_NetCDF {
+public:
+    Eclipse_NetCDF() {
+        // just instantiate the class, but no file yet
+        file_active = false;
+
+        // do some sanity checks
+        if (general_size == 0) {
+            throw std::invalid_argument("NetCDF: general_size must not be 0, since at least time information should be given.");
+        }
+        if (grid_size == 0) {
+            throw std::invalid_argument("NetCDF: grid_size must no be 0. What's the point of all this, if no occultation information is provided?");
+        }
+    }
+    ~Eclipse_NetCDF() {
+        // make sure any potentially active file is closed properly before this class is destroyed
+        if (ncid_ >= 0) {nc_close(ncid_);}
+    }
+
+    void create_new_file(std::string file_path, std::array<std::string, general_size> general_data_keys,
+                    const std::array<double, grid_size> &lon_grid, const std::array<double, grid_size> &lat_grid) {
+
+        // check for active file
+        if (file_active) {
+            throw std::runtime_error("please close the currently active file before creating a new one.");
+        }
+        // create a new NetCDF file
+        bool status = nc_create(file_path.c_str(), NC_NETCDF4 | NC_CLOBBER, &ncid_);
+        if (status != NC_NOERR) {
+            throw std::runtime_error("NetCDF: Failed to create file: " + file_path);
+        }
+
+        // define needed dimensions
+        nc_def_dim(ncid_, "steps", NC_UNLIMITED, &step_dim_);
+        nc_def_dim(ncid_, "grid", grid_size, &grid_dim_);
+
+        // define needed variables
+        for (size_t i = 0; i < general_size; i++) {
+            nc_def_var(ncid_, general_data_keys[i].c_str(), NC_DOUBLE, 1, &step_dim_, &general_ids_[i]);
+        }
+        nc_def_var(ncid_, "lon_grid", NC_DOUBLE, 1, &grid_dim_, &lon_grid_id_);
+        nc_def_var(ncid_, "lat_grid", NC_DOUBLE, 1, &grid_dim_, &lat_grid_id_);
+        int occult_dim[2] = {step_dim_, grid_dim_};
+        nc_def_var(ncid_, "occultation_data", NC_DOUBLE, 2, occult_dim, &occult_id_);
+
+        // initialize the start_ variables
+        general_start_ = 0;
+        occult_start_[0] = 0, occult_start_[1] = 0;
+
+        // close file definition mode
+        nc_enddef(ncid_);
+
+        // write the lon and lat grids
+        nc_put_var_double(ncid_, lon_grid_id_, lon_grid.data());
+        nc_put_var_double(ncid_, lat_grid_id_, lat_grid.data());
+
+        // set file_active flag
+        file_active = true;
+    }
+
+    void close_file() {
+        // close file
+        if (ncid_ >= 0) {nc_close(ncid_);}
+
+        // reset file_active flag
+        file_active = false;
+    }
+
+    void write_step(const std::array<double, general_size> &general_data, const std::array<double, grid_size> &occult_data) {
+
+        // check for active file
+        if (!file_active) {
+            throw std::runtime_error("NetCDF: cannot write when no active file is present.");
+        }
+
+        // write the general data
+        for (size_t i = 0; i < general_size; i++) {
+            nc_put_vara_double(ncid_, general_ids_[i], &general_start_, &general_count_, &general_data[i]);
+        }
+        general_start_ += general_count_;
+
+        // write the occultation data
+        nc_put_vara_double(ncid_, occult_id_, occult_start_, occult_count_, occult_data.data());
+        occult_start_[0] += occult_count_[0];
+    }
+
+private:
+    int ncid_;
+    int step_dim_, grid_dim_;
+    std::array<int, general_size> general_ids_;
+    size_t general_start_;
+    const size_t general_count_{1};
+    int lon_grid_id_, lat_grid_id_;
+    int occult_id_;
+    size_t occult_start_[2];
+    const size_t occult_count_[2]{1, grid_size};
+    bool file_active;
+};
+
+
+
+void write_intersections_to_NetCDF(std::string file_path,
+                                    const std::map<std::string, std::vector<double>> &general_data,
+                                    const std::array<std::vector<double>, 6> &points,
+                                    const std::array<std::vector<u_int64_t>, 3> &offsets)
 {
     // create NetCDF file
     int ncid;
@@ -682,23 +854,23 @@ void write_eclipse_to_NetCDF(std::string file_path,
     }
 
     // create groups for each shadow type and define variables in them
-    std::array<std::string, 3> grp_names{"umbral", "antumbral", "penumbral"};
+    std::array<std::string, 3> grp_names{"umbra", "antumbra", "penumbra"};
     std::array<std::array<int, 6>, 3> grp_ids;
 
     for (unsigned i : {0, 1, 2}) {
         std::string grp_name = grp_names[i];
         int& grp_id = grp_ids[i][0];
-        int& RA_id = grp_ids[i][1];
-        int& Dec_id = grp_ids[i][2];
+        int& lon_id = grp_ids[i][1];
+        int& lat_id = grp_ids[i][2];
         int& offsets_id = grp_ids[i][3];
         int& points_dim = grp_ids[i][4];
         int& offsets_dim = grp_ids[i][5];
 
-        const std::vector<double> &RA = points[2*i];
-        const std::vector<double> &Dec = points [2*i+1];
+        const std::vector<double> &lon = points[2*i];
+        const std::vector<double> &lat = points [2*i+1];
         const std::vector<u_int64_t> &offset = offsets[i];
-        if (RA.size() != Dec.size()) { // check that RA and Dec have same length
-            throw std::invalid_argument("NetCDF: group " + grp_name + ": RA(" + std::to_string(RA.size()) + ") and Dec(" + std::to_string(Dec.size()) + ") must have the same size.");
+        if (lon.size() != lat.size()) { // check that lon and lat have same length
+            throw std::invalid_argument("NetCDF: group " + grp_name + ": lon(" + std::to_string(lon.size()) + ") and lat(" + std::to_string(lat.size()) + ") must have the same size.");
         }
         if (offset.size() != num_steps +1) {
             throw std::invalid_argument("NetCDF: group " + grp_name + ": offset(" + std::to_string(offset.size()) + ") must be one longer than times(" + std::to_string(num_steps) + ").");
@@ -706,16 +878,17 @@ void write_eclipse_to_NetCDF(std::string file_path,
 
         nc_def_grp(ncid, grp_name.c_str(), &grp_id);
 
-        nc_def_dim(grp_id, "points", Dec.size(), &points_dim);
+        nc_def_dim(grp_id, "points", lat.size(), &points_dim);
         nc_def_dim(grp_id, "offsets", offset.size(), &offsets_dim);
 
-        nc_def_var(grp_id, "RA", NC_DOUBLE, 1, &points_dim, &RA_id);
-        nc_def_var(grp_id, "Dec", NC_DOUBLE, 1, &points_dim, &Dec_id);
+        nc_def_var(grp_id, "lon", NC_DOUBLE, 1, &points_dim, &lon_id);
+        nc_def_var(grp_id, "lat", NC_DOUBLE, 1, &points_dim, &lat_id);
         nc_def_var(grp_id, "offsets", NC_UINT64, 1, &offsets_dim, &offsets_id);
     }
 
     // close file definition mode
     nc_enddef(ncid);
+
 
     // write the general data
     for (const std::pair<std::string, std::vector<double>> data : general_data) {
@@ -726,17 +899,17 @@ void write_eclipse_to_NetCDF(std::string file_path,
     for (unsigned i : {0, 1, 2}) {
         std::string grp_name = grp_names[i];
         int& grp_id = grp_ids[i][0];
-        int& RA_id = grp_ids[i][1];
-        int& Dec_id = grp_ids[i][2];
+        int& lon_id = grp_ids[i][1];
+        int& lat_id = grp_ids[i][2];
         int& offsets_id = grp_ids[i][3];
 
-        const std::vector<double> &RA = points[2*i];
-        const std::vector<double> &Dec = points [2*i+1];
+        const std::vector<double> &lon = points[2*i];
+        const std::vector<double> &lat = points [2*i+1];
         const std::vector<u_int64_t> &offset = offsets[i];
 
-        // write RA and Dec
-        nc_put_var_double(grp_id, RA_id, RA.data());
-        nc_put_var_double(grp_id, Dec_id, Dec.data());
+        // write lon and lat
+        nc_put_var_double(grp_id, lon_id, lon.data());
+        nc_put_var_double(grp_id, lat_id, lat.data());
 
         // write offsets
         nc_put_var_ulonglong(grp_id, offsets_id, reinterpret_cast<const unsigned long long*>(offset.data()));

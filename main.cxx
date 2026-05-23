@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <format>
+#include <cstdio>
 
 #include <include/utils.h>
 #include <include/initial_conditions.h>
@@ -14,12 +15,14 @@ namespace fs = std::filesystem;
 
 const size_t N = 10; // number of bodies in the system
 
-double t0 = 0.0; // seconds since J2000.0 epoch
-BodyArray<N> initial_bodies(std::array{Sun, Earth, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune});
+const double t0 = 0.0; // seconds since J2000.0 epoch
+const BodyArray<N> initial_bodies(std::array{Sun, Earth, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune});
 
-double dt = 60.0;
-double T = 50.0 * 365.25 * 24 * 60 * 60;
-size_t K = T/dt;
+const double dt = 60.0;
+const double T = 50.0 * 365.25 * 24 * 60 * 60;
+const size_t K = T/dt;
+
+const size_t grid_size = 2e5;
 
 
 
@@ -172,16 +175,25 @@ int main() {
     const Body &earth = solver.GetCurrentBody(1);
     const Body &moon = solver.GetCurrentBody(2);
 
-    fs::path filename;
+    // create sampling grid for eclipse occultation data (Fibonacci sphere)
+    std::array<double, grid_size> lon_grid;
+    std::array<double, grid_size> lat_grid;
+    for (size_t i = 0; i < grid_size; i++) {
+        lon_grid[i] = fmod((3-sqrt(5))*M_PI *i, 2*M_PI);
+        lat_grid[i] = asin(1.0 - double(2*i+1)/grid_size);
+    }
+
     bool solar_eclipse = false;
     bool solar_eclipse_active = false;
-    double t_max = 0.0;
+    double t_max;
     double dist;
     double min_dist;
-    std::map<std::string, std::vector<double>> general_data;
-    std::array<std::vector<double>, 6> shadow_intersects;
-    std::array<std::vector<u_int64_t>, 3> offsets;
-
+    fs::path file_path;
+    fs::path temp_path = folder / "eclipe_temp.nc";
+    std::array<std::string, 7> general_data_keys{"time", "r_sun", "lon_sun", "lat_sun", "r_moon", "lon_moon", "lat_moon"};
+    Eclipse_NetCDF<grid_size, 7> netcdf_file;
+    std::array<double, 7> general_data;
+    std::array<double, grid_size> occult_data;
 
     std::cout << "Starting integration with dt = " << dt << " seconds for a total time of " << T << " seconds (" << T/60/60/24/365.25 << " years) (" << K << " steps)." << "\n" << std::endl;
 
@@ -194,25 +206,19 @@ int main() {
         if (solar_eclipse && !solar_eclipse_active) {
             std::cout << "detected solar eclipse start at time " << j2000_to_utc_datetime(t) << "." << std::endl;
 
-            filename = "solar_eclipse_of_" + j2000_to_utc_date(t_max);
-            for (unsigned i : {0, 1, 2}) { // start offsets with 0
-                offsets[i].push_back(0);
-            }
+            min_dist = INFINITY; // start min_dist at infinity
 
-            min_dist = INFINITY;
+            netcdf_file.create_new_file(temp_path, general_data_keys, lon_grid, lat_grid);
         }
         if (!solar_eclipse && solar_eclipse_active) {
             std::cout << "detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << "." << std::endl;
             std::cout << "detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
 
-            write_eclipse_to_NetCDF(folder / filename,
-                                    general_data,
-                                    shadow_intersects,
-                                    offsets);
+            netcdf_file.close_file();
 
-            general_data = {};
-            shadow_intersects = {};
-            offsets = {};
+            file_path = folder / ("solar_eclipse_of_" + j2000_to_utc_date(t_max) + ".nc");
+            // move temp_path to file_path
+            std::rename(temp_path.c_str(), file_path.c_str());
         }
         solar_eclipse_active = solar_eclipse;
 
@@ -224,29 +230,19 @@ int main() {
                 t_max = t;
             }
 
-            // save time and suns RA and Dec
+            // save time and sun and moon positions
             std::array<double, 3> sun_spherical= compute_spherical_seen_from_earth(sun, earth);
             std::array<double, 3> moon_spherical= compute_spherical_seen_from_earth(moon, earth);
-            general_data["time"].push_back(t);
-            general_data["sun_r"].push_back(sun_spherical[0]);
-            general_data["sun_RA"].push_back(sun_spherical[1]);
-            general_data["sun_Dec"].push_back(sun_spherical[2]);
-            general_data["moon_r"].push_back(moon_spherical[0]);
-            general_data["moon_RA"].push_back(moon_spherical[1]);
-            general_data["moon_Dec"].push_back(moon_spherical[2]);
+            general_data = {t,
+                            sun_spherical[0], sun_spherical[1], sun_spherical[2],
+                            moon_spherical[0], moon_spherical[1], moon_spherical[2]};
 
-            // compute shadow intersections with earth and save
-            std::array<std::vector<double>, 6> new_shadow_intersects = compute_shadow_earth_intersection(earth, moon, sun);
-            for (unsigned i : {0, 1, 2, 3, 4, 5}) {
-                shadow_intersects[i].insert(shadow_intersects[i].end(), new_shadow_intersects[i].begin(), new_shadow_intersects[i].end());
-            }
-            for (unsigned i : {0, 1, 2}) {
-                offsets[i].push_back(shadow_intersects[2*i].size());
-            }
+            // compute local occultations and save
+            occult_data = compute_local_occultations(earth, moon, sun, lon_grid, lat_grid);
+
+            // write data to the file
+            netcdf_file.write_step(general_data, occult_data);
         }
-
-
-
 
     }
 
