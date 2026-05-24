@@ -2,6 +2,7 @@ import numpy as np
 from astropy.time import Time
 import astropy.units as u
 from scipy.spatial import KDTree
+from global_land_mask import globe
 
 
 
@@ -87,5 +88,15 @@ def interpolate_linearly(x, x1, f1, x2, f2) :
 
     return m*x+t
 
+
+def is_on_land(lon, lat) :
+    # return True is the point is on land, False is over water
+    assert lon.shape == lat.shape
+
+    lon_deg = lon*180/np.pi
+    lat_deg = lat*180/np.pi
+    lon_deg[lon_deg > 180] -= 360
+
+    return globe.is_land(lat_deg, lon_deg)
 
 
