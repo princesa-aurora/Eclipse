@@ -3,6 +3,8 @@ from astropy.time import Time
 import astropy.units as u
 from scipy.spatial import KDTree
 from global_land_mask import globe
+import reverse_geocoder as rg
+import pycountry
 
 
 
@@ -91,12 +93,71 @@ def interpolate_linearly(x, x1, f1, x2, f2) :
 
 def is_on_land(lon, lat) :
     # return True is the point is on land, False is over water
-    assert lon.shape == lat.shape
+    assert np.asarray(lon).shape == np.asarray(lat).shape
 
     lon_deg = lon*180/np.pi
     lat_deg = lat*180/np.pi
-    lon_deg[lon_deg > 180] -= 360
+
+    if (np.ndim(lat) == 0):
+        if lon_deg > 180: lon_deg -= 360
+    else:
+        lon_deg[lon_deg > 180] -= 360
 
     return globe.is_land(lat_deg, lon_deg)
+
+
+
+def get_location_name(lon, lat):
+    # get a name for a location given by lon/lat
+    lon_deg = lon *180/np.pi
+    lat_deg = lat *180/np.pi
+    if lon_deg > 180: lon_deg -= 360
+
+    # check if the coordinate is over water
+    if not is_on_land(lon, lat):
+        # figure out what ocean it is in (only roughly, smaller seas like the mediterranean are omitted)
+        if lat_deg > 60.0:
+            return "Arctic Ocean"
+        elif lat_deg < -60.0:
+            return "Southern Ocean"
+        elif lon_deg < -67.3:
+            return "Pacific Ocean"
+        elif lon_deg < 20.0:
+            return "Atlantic Ocean"
+        elif lon_deg < 146.9:
+            return "Indian Ocean"
+        else:
+            return "Pacific Ocean"
+    
+    # check for Antarctica (since it is uninhabited it wouldn't be recognized by reverse geocoder)
+    if lat_deg < -60:
+        return "Antarctica"
+
+    # if on land and not in Antarctica, safely run the offline reverse geocoder
+    coordinates = (lat_deg, lon_deg)
+    results = rg.search(coordinates, verbose=False)
+
+    if results:
+        info = results[0]
+        name = info.get('name')
+        admin1 = info.get('admin1')
+        cc = info.get('cc')
+
+        try:
+            # convert from country name abbreviation to full name
+            country_lookup = pycountry.countries.get(alpha_2=cc)
+            country_name = getattr(country_lookup, 'common_name', country_lookup.name)
+        except (KeyError, AttributeError):
+            country_name = cc 
+
+        if admin1 and admin1 != name:
+            return f"{name} ({admin1}), {country_name}"
+        else:
+            return f"{name}, {country_name}"
+        
+    return "Unknown Land Location"
+
+
+
 
 

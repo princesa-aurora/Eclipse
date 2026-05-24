@@ -107,6 +107,7 @@ if np.isnan(lat_opt_vis):
     exit(0)
 else:
     print(f"The eclipse is visible for the longest at lon({lon_opt_vis*180/np.pi}°), lat({lat_opt_vis*180/np.pi}°) anywhere on earth.")
+    print(f"This location is in {get_location_name(lon_opt_vis, lat_opt_vis)}.")
     print(f"It can be seen there for {visible_times[argmax_vis] /60} minutes.")
     print()
 
@@ -115,6 +116,7 @@ if np.isnan(lat_opt_vis_land):
     exit(0)
 else:
     print(f"On land it is visible for the longest at lon({lon_opt_vis_land*180/np.pi}°), lat({lat_opt_vis_land*180/np.pi}°).")
+    print(f"This location is in {get_location_name(lon_opt_vis_land, lat_opt_vis_land)}.")
     print(f"It can be seen there for {visible_times[land_mask][argmax_vis_land] /60} minutes.")
     print()
 
@@ -123,6 +125,7 @@ if np.isnan(lat_opt_tot):
     exit(0)
 else:
     print(f"Totality lasts the longest at: lon({lon_opt_tot*180/np.pi}°), lat({lat_opt_tot*180/np.pi}°) anywhere on earth.")
+    print(f"This location is in {get_location_name(lon_opt_tot, lat_opt_tot)}.")
     print(f"It lasts there for {totality_times[argmax_tot] /60} minutes.")
     print()
 
@@ -131,6 +134,7 @@ if np.isnan(lat_opt_tot_land):
     exit(0)
 else:
     print(f"On land totality lasts the longest at lon({lon_opt_tot_land*180/np.pi}°), lat({lat_opt_tot_land*180/np.pi}°).")
+    print(f"This location is in {get_location_name(lon_opt_tot_land, lat_opt_tot_land)}.")
     print(f"It lasts there for {totality_times[land_mask][argmax_tot_land] /60} minutes.")
     print()
 
