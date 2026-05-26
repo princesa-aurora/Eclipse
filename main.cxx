@@ -22,7 +22,7 @@ const double dt = 60.0;
 const double T = 50.0 * 365.25 * 24 * 60 * 60;
 const size_t K = T/dt;
 
-const size_t grid_size = 2e5;
+const size_t grid_size = 1e5;
 
 
 
@@ -192,8 +192,9 @@ int main() {
     fs::path temp_path = folder / "eclipe_temp.nc";
     std::array<std::string, 7> general_data_keys{"time", "r_sun", "lon_sun", "lat_sun", "r_moon", "lon_moon", "lat_moon"};
     Eclipse_NetCDF<grid_size, 7> netcdf_file;
-    std::array<double, 7> general_data;
-    std::array<double, grid_size> occult_data;
+    std::array<double, 7> general_buffer;
+    std::array<double, grid_size> occult_buffer;
+    std::array<u_int8_t, grid_size> classif_buffer;
 
     std::cout << "Starting integration with dt = " << dt << " seconds for a total time of " << T << " seconds (" << T/60/60/24/365.25 << " years) (" << K << " steps)." << "\n" << std::endl;
 
@@ -233,15 +234,16 @@ int main() {
             // save time and sun and moon positions
             std::array<double, 3> sun_spherical= compute_spherical_seen_from_earth(sun, earth);
             std::array<double, 3> moon_spherical= compute_spherical_seen_from_earth(moon, earth);
-            general_data = {t,
+            general_buffer = {t,
                             sun_spherical[0], sun_spherical[1], sun_spherical[2],
                             moon_spherical[0], moon_spherical[1], moon_spherical[2]};
 
             // compute local occultations and save
-            occult_data = compute_local_occultations(earth, moon, sun, lon_grid, lat_grid);
+            compute_local_occultations(earth, moon, sun, lon_grid, lat_grid,
+                                                occult_buffer, classif_buffer);
 
             // write data to the file
-            netcdf_file.write_step(general_data, occult_data);
+            netcdf_file.write_step(general_buffer, occult_buffer, classif_buffer);
         }
 
     }

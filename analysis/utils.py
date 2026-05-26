@@ -8,6 +8,10 @@ import pycountry
 
 
 
+BOLD = '\033[1m'
+RESET = '\033[0m'
+
+
 
 def j2000_to_utc_datetime(j2000_seconds) :
     # the input is seconds that have passed since the J2000.0 epoch
@@ -156,7 +160,6 @@ def get_location_name(lon, lat):
             return f"{name}, {country_name}"
         
     return "Unknown Land Location"
-
 
 
 

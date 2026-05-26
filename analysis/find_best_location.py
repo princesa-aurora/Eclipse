@@ -6,46 +6,7 @@ import PIL
 from utils import *
 
 
-
-def time_visible(occultation_data, times):
-    # for every point compute the total timespan for which the eclipse is visible
-
-    start_idcs = np.argmax(occultation_data > 0, axis=0)
-    end_idcs = len(occultation_data)-1 - np.argmax(occultation_data[::-1] > 0, axis=0)
-
-    start_times = times[start_idcs]
-    end_times = times[end_idcs]
-
-    time = end_times - start_times
-
-    # the above calculation returns nonsense at locations where the eclipse isn't visible at any time
-    # so we mask those locations and set the time manually to 0
-    time[np.all(occultation_data == 0, axis=0)] = 0
-
-    return time
-
-
-
-def time_in_totality(occultation_data, times):
-    # for every point compute the timespan for which the eclipse is total
-
-    start_idcs = np.argmax(occultation_data == 1, axis=0)
-    end_idcs = len(occultation_data)-1 - np.argmax(occultation_data[::-1] == 1, axis=0)
-
-    start_times = times[start_idcs]
-    end_times = times[end_idcs]
-
-    time = end_times - start_times
-
-    # the above calculation returns nonsense at locations where the eclipse isn't total at any time
-    # so we mask those locations and set the time manually to 0
-    time[np.all(occultation_data < 1, axis=0)] = 0
-
-    return time
-
-
-
-file_path = "/home/aurora/eclipse_data/22.05.2026_20:12:50/solar_eclipse_of_5.2.2000.nc"
+file_path = "/home/aurora/eclipse_data/25.05.2026_04:24:13/solar_eclipse_of_5.2.2000.nc"
 
 
 dataset = xr.open_dataset(file_path)
@@ -53,90 +14,122 @@ dataset = xr.open_dataset(file_path)
 times = dataset["time"].values
 sun_lon = dataset["lon_sun"].values
 sun_lat = dataset["lat_sun"].values
-num_steps = len(times)
 
 lon_grid = dataset["lon_grid"].values
 lat_grid = dataset["lat_grid"].values
-grid_size = len(lat_grid)
 
-occultation_data = dataset["occultation_data"].values
+classification_data = dataset["classification_data"].values
+topology_data = np.mod(classification_data, 4)
+angle_data = (classification_data - topology_data) /4
 
 dataset.close()
 
+day_mask = (np.cos(lat_grid[None,:])*np.cos(sun_lat[:,None])*np.cos(lon_grid[None,:]-sun_lon[:,None]) + np.sin(lat_grid[None,:])*np.sin(sun_lat[:,None]) > 0)
 land_mask = is_on_land(lon_grid, lat_grid)
 
 
-visible_times = time_visible(occultation_data, times)
-totality_times = time_in_totality(occultation_data, times)
+# for every point compute the total timespan for which the eclipse is visible
+visibility_mask = (topology_data > 0)
+visibility_mask = np.logical_and(visibility_mask, day_mask)
+start_idcs = np.argmax(visibility_mask, axis=0)
+end_idcs = len(visibility_mask)-1 - np.argmax(visibility_mask[::-1], axis=0)
+visibility_times = times[end_idcs] - times[start_idcs]
+# the above calculation returns nonsense at locations where the eclipse isn't visible at any time
+# so we mask those locations and set the time manually to 0
+visibility_times[np.all(~visibility_mask, axis=0)] = 0
 
-if (visible_times > 0).any():
-    argmax_vis = np.argmax(visible_times)
-    lon_opt_vis = lon_grid[argmax_vis]
-    lat_opt_vis = lat_grid[argmax_vis]
+# for every point compute the timespan for which the eclipse is annular
+annularity_mask = (topology_data == 2)
+annularity_mask = np.logical_and(annularity_mask, day_mask)
+start_idcs = np.argmax(annularity_mask, axis=0)
+end_idcs = len(annularity_mask)-1 - np.argmax(annularity_mask[::-1], axis=0)
+annularity_times = times[end_idcs] - times[start_idcs]
+# the above calculation returns nonsense at locations where the eclipse isn't annular at any time
+# so we mask those locations and set the time manually to 0
+annularity_times[np.all(~annularity_mask, axis=0)] = 0
+
+# for every point compute the timespan for which the eclipse is total
+totality_mask = (topology_data == 3)
+totality_mask = np.logical_and(totality_mask, day_mask)
+start_idcs = np.argmax(totality_mask, axis=0)
+end_idcs = len(totality_mask)-1 - np.argmax(totality_mask[::-1], axis=0)
+totality_times = times[end_idcs] - times[start_idcs]
+# the above calculation returns nonsense at locations where the eclipse isn't total at any time
+# so we mask those locations and set the time manually to 0
+totality_times[np.all(~totality_mask, axis=0)] = 0
+
+
+if (visibility_times == 0).all():
+    print(f"{BOLD}There is no eclipse to be found in the data.{RESET}")
+    exit(0)
+
+print(f"{BOLD}Best eclipse viewing locations:{RESET}")
+print(f"{BOLD}---------------------------------{RESET}")
+
+print(f"{BOLD}Visibility anywhere on earth:{RESET}")
+argmax_vis = np.argmax(visibility_times)
+lon_opt_vis = lon_grid[argmax_vis]
+lat_opt_vis = lat_grid[argmax_vis]
+print(f"lon({lon_opt_vis*180/np.pi}°), lat({lat_opt_vis*180/np.pi}°) ({get_location_name(lon_opt_vis, lat_opt_vis)})")
+print(f"It is visible there for {visibility_times[argmax_vis] /60} minutes.")
+print()
+
+print(f"{BOLD}Annularity anywhere on earth:{RESET}")
+if (annularity_times > 0).any():
+    argmax_ann = np.argmax(annularity_times)
+    lon_opt_ann = lon_grid[argmax_ann]
+    lat_opt_ann = lat_grid[argmax_ann]
+    print(f"lon({lon_opt_ann*180/np.pi}°), lat({lat_opt_ann*180/np.pi}°) ({get_location_name(lon_opt_ann, lat_opt_ann)})")
+    print(f"It is annular there for {annularity_times[argmax_ann] /60} minutes.")
 else:
-    lon_opt_vis = np.nan
-    lat_opt_vis = np.nan
+    print("The eclipse isn't annular anywhere on earth.")
+print()
 
-if (visible_times[land_mask] > 0).any():
-    argmax_vis_land = np.argmax(visible_times[land_mask])
-    lon_opt_vis_land = lon_grid[land_mask][argmax_vis_land]
-    lat_opt_vis_land = lat_grid[land_mask][argmax_vis_land]
-else:
-    lon_opt_vis_land = np.nan
-    lat_opt_vis_land = np.nan
-
+print(f"{BOLD}Totality anywhere on earth:{RESET}")
 if (totality_times > 0).any():
     argmax_tot = np.argmax(totality_times)
     lon_opt_tot = lon_grid[argmax_tot]
     lat_opt_tot = lat_grid[argmax_tot]
+    print(f"lon({lon_opt_tot*180/np.pi}°), lat({lat_opt_tot*180/np.pi}°) ({get_location_name(lon_opt_tot, lat_opt_tot)})")
+    print(f"It is total there for {totality_times[argmax_tot] /60} minutes.")
 else:
-    lon_opt_tot = np.nan
-    lat_opt_tot = np.nan
+    print("The eclipse isn't total anywhere on earth.")
+print()
 
+
+if (visibility_times[land_mask] == 0).all():
+    print(f"{BOLD}The eclipse isn't visible anywhere on land.{RESET}")
+    exit(0)
+
+print(f"{BOLD}Visibility anwhere on land:{RESET}")
+argmax_vis_land = np.argmax(visibility_times[land_mask])
+lon_opt_vis_land = lon_grid[land_mask][argmax_vis_land]
+lat_opt_vis_land = lat_grid[land_mask][argmax_vis_land]
+print(f"lon({lon_opt_vis_land*180/np.pi}°), lat({lat_opt_vis_land*180/np.pi}°) ({get_location_name(lon_opt_vis_land, lat_opt_vis_land)})")
+print(f"It is visible there for {visibility_times[land_mask][argmax_vis_land] /60} minutes.")
+print()
+
+print(f"{BOLD}Annularity anywhere on land:{RESET}")
+if (annularity_times[land_mask] > 0).any():
+    argmax_ann_land = np.argmax(annularity_times[land_mask])
+    lon_opt_ann_land = lon_grid[land_mask][argmax_ann_land]
+    lat_opt_ann_land = lat_grid[land_mask][argmax_ann_land]
+    print(f"lon({lon_opt_ann_land*180/np.pi}°), lat({lat_opt_ann_land*180/np.pi}°) ({get_location_name(lon_opt_ann_land, lat_opt_ann_land)})")
+    print(f"It is annular there for {annularity_times[land_mask][argmax_ann_land] /60} minutes.")
+else:
+    print("The eclipse isn't annular anywhere on land.")
+print()
+
+print(f"{BOLD}Totality anywhere on land:{RESET}")
 if (totality_times[land_mask] > 0).any():
     argmax_tot_land = np.argmax(totality_times[land_mask])
     lon_opt_tot_land = lon_grid[land_mask][argmax_tot_land]
     lat_opt_tot_land = lat_grid[land_mask][argmax_tot_land]
+    print(f"lon({lon_opt_tot_land*180/np.pi}°), lat({lat_opt_tot_land*180/np.pi}°) ({get_location_name(lon_opt_tot_land, lat_opt_tot_land)})")
+    print(f"It is total there for {totality_times[land_mask][argmax_tot_land] /60} minutes.")
 else:
-    lon_opt_tot_land = np.nan
-    lat_opt_tot_land = np.nan
-
-
-if np.isnan(lat_opt_vis):
-    print("There is no eclipse to be found in the data.")
-    exit(0)
-else:
-    print(f"The eclipse is visible for the longest at lon({lon_opt_vis*180/np.pi}°), lat({lat_opt_vis*180/np.pi}°) anywhere on earth.")
-    print(f"This location is in {get_location_name(lon_opt_vis, lat_opt_vis)}.")
-    print(f"It can be seen there for {visible_times[argmax_vis] /60} minutes.")
-    print()
-
-if np.isnan(lat_opt_vis_land):
-    print("However it isn't visible anywhere on land.")
-    exit(0)
-else:
-    print(f"On land it is visible for the longest at lon({lon_opt_vis_land*180/np.pi}°), lat({lat_opt_vis_land*180/np.pi}°).")
-    print(f"This location is in {get_location_name(lon_opt_vis_land, lat_opt_vis_land)}.")
-    print(f"It can be seen there for {visible_times[land_mask][argmax_vis_land] /60} minutes.")
-    print()
-
-if np.isnan(lat_opt_tot):
-    print("The eclipse isn't total anywhere.")
-    exit(0)
-else:
-    print(f"Totality lasts the longest at: lon({lon_opt_tot*180/np.pi}°), lat({lat_opt_tot*180/np.pi}°) anywhere on earth.")
-    print(f"This location is in {get_location_name(lon_opt_tot, lat_opt_tot)}.")
-    print(f"It lasts there for {totality_times[argmax_tot] /60} minutes.")
-    print()
-
-if np.isnan(lat_opt_tot_land):
-    print("However it isn't total anywhere on land.")
-    exit(0)
-else:
-    print(f"On land totality lasts the longest at lon({lon_opt_tot_land*180/np.pi}°), lat({lat_opt_tot_land*180/np.pi}°).")
-    print(f"This location is in {get_location_name(lon_opt_tot_land, lat_opt_tot_land)}.")
-    print(f"It lasts there for {totality_times[land_mask][argmax_tot_land] /60} minutes.")
-    print()
+    print("The eclipse isn't total anywhere on land.")
+print()
 
 
 

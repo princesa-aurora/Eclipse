@@ -511,6 +511,13 @@ double acos_continued(double x) {
     else {return acos(x);}
 }
 
+double atan3(double y, double x) {
+    // compute atan2() and cast it to between 0 to 2*pi
+    double at2 = atan2(y, x);
+    if (at2 >= 0) {return at2;}
+    else {return at2 + 2*M_PI;} // if at2 < 0 add 2*pi to make it positive
+}
+
 double disks_intersection_area(double R1, double R2, double d) {
     // what is the intersection area of two disks (one with radius R1 and the other with R2)
     // whose centers are separated by a distance d?
@@ -524,11 +531,13 @@ double disks_intersection_area(double R1, double R2, double d) {
 
 
 template<size_t grid_size>
-std::array<double, grid_size> compute_local_occultations(const Body &earth, const Body &moon,  const Body &sun,
-                                                            std::array<double, grid_size> lon_grid, std::array<double, grid_size> lat_grid) {
+void compute_local_occultations(const Body &earth, const Body &moon,  const Body &sun,
+                                const std::array<double, grid_size> &lon_grid, const std::array<double, grid_size> &lat_grid,
+                                std::array<double, grid_size> &occult_buffer, std::array<u_int8_t, grid_size> &classif_buffer) {
     // compute the occultation ratios of the sun at different points on the earth
     // thereby ignore day and night, i.e. pretend that one can look through the earth and see the eclipse even though its night
     // (this is just so darkness due to eclipse and darkness due to night are not mixed up)
+    // write the results into the provided buffers
     const double& R_earth = earth.GetR();
     const double& R_moon = moon.GetR();
     const double& R_sun = sun.GetR();
@@ -537,45 +546,69 @@ std::array<double, grid_size> compute_local_occultations(const Body &earth, cons
     Vector x_moon = moon.Getx();
     Vector x_sun = sun.Getx();
 
-    const Matrix RotMat_earth = earth.GetRotMat();
+    const Matrix RotMat_inv_earth = earth.GetRotMat().transpose();
 
     double A_sun = M_PI*R_sun*R_sun;
 
-    // shift ICRF center to earth (this just saves a tiny bit of vector additions later)
+    // transform from ICRF to terrestrial frame
     // x_earth = 0;
-    x_moon -= x_earth_ICRF;
-    x_sun -= x_earth_ICRF;
+    x_moon = RotMat_inv_earth *(x_moon - x_earth_ICRF);
+    x_sun = RotMat_inv_earth *(x_sun - x_earth_ICRF);
 
-    // loop over the lonitudes and latitudes and compute the respective occultation ratios
-    double lon, lat;
-    std::array<double, grid_size> occult_arr;
-    Vector x;
-    double d_sun, d_moon_parallel, d_moon_orthogonal;
-    Vector e_x_sun;
-    double R_moon_scaled, d_moon_scaled;
-
+    // loop over the lonitudes and latitudes and compute the respective occultation rates
+    // and the topology including angle of the moon relative to the sun
     for (unsigned i = 0; i < grid_size; i++) {
-        lon = lon_grid[i];
-        lat = lat_grid[i];
+        double lon = lon_grid[i];
+        double lat = lat_grid[i];
 
-        // convert to position vector in earth-centered ICRF
-        x = RotMat_earth*R_earth*Vector(cos(lat)*cos(lon), cos(lat)*sin(lon), sin(lat));
+        // convert to position vector
+        Vector x = R_earth *Vector(cos(lat)*cos(lon), cos(lat)*sin(lon), sin(lat));
 
-        d_sun = (x_sun-x).norm(); // distance from observation point to the sun
-        e_x_sun = (x_sun-x)/d_sun; // unit vector pointing from observation point to the sun
+        Vector x_s = x_sun - x; // vector from observation point to the sun
+        Vector x_m = x_moon - x; // vector from observation point to the moon
+        double rho_s = sqrt(x_s(0)*x_s(0) + x_s(1)*x_s(1)); // cylindrical radius of x_s
+        double r_s = x_s.norm(); // distance from observation point to the sun
 
-        d_moon_parallel = (x_moon-x).dot(e_x_sun); // distance from observation point to the moon parallel to e_x_sun
-        d_moon_orthogonal = (x_moon-x - d_moon_parallel*e_x_sun).norm(); // distance from observation point to the moon orthogonal to e_x_sun
+        Vector e_parallel = x_s/r_s; // unit vector pointing to the sun
+        Vector e_orthogonal_southnorth = Vector(0.0, 0.0, r_s/rho_s) - x_s(2)/rho_s *e_parallel; // unit vector pointing north to south
+        Vector e_orthogonal_eastwest(x_s(1)/rho_s, -x_s(0)/rho_s, 0.0); // unit vector pointing east to west
 
-        // scale moons radius and orthogonal distance to as if it were as far away as the sun
-        R_moon_scaled = R_moon *d_sun/d_moon_parallel;
-        d_moon_scaled = d_moon_orthogonal *d_sun/d_moon_parallel;
+        double d_moon_parallel = e_parallel.dot(x_m);
+        double d_moon_orthogonal_southnorth = e_orthogonal_southnorth.dot(x_m);
+        double d_moon_orthogonal_eastwest = e_orthogonal_eastwest.dot(x_m);
+
+        double d_moon_orthogonal = sqrt(d_moon_orthogonal_southnorth*d_moon_orthogonal_southnorth
+                                        + d_moon_orthogonal_eastwest*d_moon_orthogonal_eastwest);
+
+        // scale moons radius and orthogonal distance to as if it was as far away as the sun
+        double R_moon_scaled = R_moon *r_s/d_moon_parallel;
+        double d_moon_scaled = d_moon_orthogonal *r_s/d_moon_parallel;
 
         // compute intersection area of sun and scaled moon (both simplified to disks) and divide by sun area to get occultations
-        occult_arr[i] = disks_intersection_area(R_sun, R_moon_scaled, d_moon_scaled) /A_sun;
-    }
+        occult_buffer[i] = disks_intersection_area(R_sun, R_moon_scaled, d_moon_scaled) /A_sun;
 
-    return occult_arr;
+        // classify the eclipse topology: no eclipse(0), partial(1), annular(2), total(3)
+        u_int8_t topology;
+        if (d_moon_scaled > R_sun + R_moon_scaled) {
+            topology = 0; // no eclipse
+        }
+        else if (d_moon_scaled > abs(R_sun - R_moon_scaled)) {
+            topology = 1; // partiaĺ eclipse
+        }
+        else if (R_sun > R_moon_scaled) {
+            topology = 2; // annular eclipse
+        }
+        else { // R_moon_scaled > R_sun
+            topology = 3; // total eclipse
+        }
+
+        // sort the clockwise angle of the moon relative to the sun (0° being north) into 6° bins
+        double angle = atan3(d_moon_orthogonal_eastwest, d_moon_orthogonal_southnorth);
+        u_int8_t angle_binned = floor(angle*30.0/M_PI);
+
+        // combine topology and angle into a combined classification
+        classif_buffer[i] = 4*angle_binned + topology;
+    }
 }
 
 
@@ -760,12 +793,13 @@ public:
         }
         nc_def_var(ncid_, "lon_grid", NC_DOUBLE, 1, &grid_dim_, &lon_grid_id_);
         nc_def_var(ncid_, "lat_grid", NC_DOUBLE, 1, &grid_dim_, &lat_grid_id_);
-        int occult_dim[2] = {step_dim_, grid_dim_};
-        nc_def_var(ncid_, "occultation_data", NC_DOUBLE, 2, occult_dim, &occult_id_);
+        int matrix_dim[2] = {step_dim_, grid_dim_};
+        nc_def_var(ncid_, "occultation_data", NC_DOUBLE, 2, matrix_dim, &occult_id_);
+        nc_def_var(ncid_, "classification_data", NC_UBYTE, 2, matrix_dim, &classif_id_);
 
         // initialize the start_ variables
         general_start_ = 0;
-        occult_start_[0] = 0, occult_start_[1] = 0;
+        matrix_start_[0] = 0, matrix_start_[1] = 0;
 
         // close file definition mode
         nc_enddef(ncid_);
@@ -786,7 +820,9 @@ public:
         file_active = false;
     }
 
-    void write_step(const std::array<double, general_size> &general_data, const std::array<double, grid_size> &occult_data) {
+    void write_step(const std::array<double, general_size> &general_data,
+                    const std::array<double, grid_size> &occult_data,
+                    const std::array<u_int8_t, grid_size> &classif_data) {
 
         // check for active file
         if (!file_active) {
@@ -799,9 +835,10 @@ public:
         }
         general_start_ += general_count_;
 
-        // write the occultation data
-        nc_put_vara_double(ncid_, occult_id_, occult_start_, occult_count_, occult_data.data());
-        occult_start_[0] += occult_count_[0];
+        // write the occultation and classification data
+        nc_put_vara_double(ncid_, occult_id_, matrix_start_, matrix_count_, occult_data.data());
+        nc_put_vara_uchar(ncid_, classif_id_, matrix_start_, matrix_count_, classif_data.data());
+        matrix_start_[0] += matrix_count_[0];
     }
 
 private:
@@ -811,9 +848,9 @@ private:
     size_t general_start_;
     const size_t general_count_{1};
     int lon_grid_id_, lat_grid_id_;
-    int occult_id_;
-    size_t occult_start_[2];
-    const size_t occult_count_[2]{1, grid_size};
+    int occult_id_, classif_id_;
+    size_t matrix_start_[2];
+    const size_t matrix_count_[2]{1, grid_size};
     bool file_active;
 };
 
