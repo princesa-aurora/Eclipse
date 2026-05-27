@@ -25,6 +25,38 @@ template<unsigned N>
 using VectorArray = Eigen::Matrix<double, N, 3>;
 
 
+template <typename T, size_t k>
+class heap_array { // basically like a std::array, but allocates memory on the heap not stack for much larger possible sizes
+public:
+    // default constructor
+    heap_array() : data_(k) {} // allocate memory for the desired k elements
+
+    // value assignment constructor
+    heap_array(const T (&init_array)[k]) : data_(init_array, init_array + k) {}
+
+    // expose standard array methods
+    T& operator[](size_t index) {
+        return data_[index];
+    }
+    const T& operator[](size_t index) const {
+        return data_[index];
+    }
+    T* data() {
+        return data_.data();
+    }
+    const T* data() const {
+        return data_.data();
+    }
+    size_t size() const {
+        return k;
+    }
+
+private:
+    std::vector<T> data_; // std::vector allocates memory on the heap
+};
+
+
+
 class Body {
 
 public:
@@ -227,7 +259,7 @@ template<unsigned N>
 class BodyArray {
 
 public:
-    BodyArray(std::array<Body ,N> body_arr) :
+    BodyArray(heap_array<Body ,N> body_arr) :
         body_arr_(body_arr)
     {}
 
@@ -379,7 +411,7 @@ public:
 
 
 private:
-    std::array<Body, N> body_arr_;
+    heap_array<Body, N> body_arr_;
 };
 
 
@@ -532,8 +564,8 @@ double disks_intersection_area(double R1, double R2, double d) {
 
 template<size_t grid_size>
 void compute_local_occultations(const Body &earth, const Body &moon,  const Body &sun,
-                                const std::array<double, grid_size> &lon_grid, const std::array<double, grid_size> &lat_grid,
-                                std::array<double, grid_size> &occult_buffer, std::array<u_int8_t, grid_size> &classif_buffer) {
+                                const heap_array<double, grid_size> &lon_grid, const heap_array<double, grid_size> &lat_grid,
+                                heap_array<double, grid_size> &occult_buffer, heap_array<u_int8_t, grid_size> &classif_buffer) {
     // compute the occultation ratios of the sun at different points on the earth
     // thereby ignore day and night, i.e. pretend that one can look through the earth and see the eclipse even though its night
     // (this is just so darkness due to eclipse and darkness due to night are not mixed up)
@@ -771,7 +803,7 @@ public:
     }
 
     void create_new_file(std::string file_path, std::array<std::string, general_size> general_data_keys,
-                    const std::array<double, grid_size> &lon_grid, const std::array<double, grid_size> &lat_grid) {
+                    const heap_array<double, grid_size> &lon_grid, const heap_array<double, grid_size> &lat_grid) {
 
         // check for active file
         if (file_active) {
@@ -821,8 +853,8 @@ public:
     }
 
     void write_step(const std::array<double, general_size> &general_data,
-                    const std::array<double, grid_size> &occult_data,
-                    const std::array<u_int8_t, grid_size> &classif_data) {
+                    const heap_array<double, grid_size> &occult_data,
+                    const heap_array<u_int8_t, grid_size> &classif_data) {
 
         // check for active file
         if (!file_active) {

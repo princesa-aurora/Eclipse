@@ -16,7 +16,7 @@ namespace fs = std::filesystem;
 const size_t N = 10; // number of bodies in the system
 
 const double t0 = 0.0; // seconds since J2000.0 epoch
-const BodyArray<N> initial_bodies(std::array{Sun, Earth, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune});
+const BodyArray<N> initial_bodies(heap_array{{Sun, Earth, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune}});
 
 const double dt = 60.0;
 const double T = 50.0 * 365.25 * 24 * 60 * 60;
@@ -176,8 +176,8 @@ int main() {
     const Body &moon = solver.GetCurrentBody(2);
 
     // create sampling grid for eclipse occultation data (Fibonacci sphere)
-    std::array<double, grid_size> lon_grid;
-    std::array<double, grid_size> lat_grid;
+    heap_array<double, grid_size> lon_grid;
+    heap_array<double, grid_size> lat_grid;
     for (size_t i = 0; i < grid_size; i++) {
         lon_grid[i] = fmod((3-sqrt(5))*M_PI *i, 2*M_PI);
         lat_grid[i] = asin(1.0 - double(2*i+1)/grid_size);
@@ -190,11 +190,11 @@ int main() {
     double min_dist;
     fs::path file_path;
     fs::path temp_path = folder / "eclipe_temp.nc";
-    std::array<std::string, 7> general_data_keys{"time", "r_sun", "lon_sun", "lat_sun", "r_moon", "lon_moon", "lat_moon"};
     Eclipse_NetCDF<grid_size, 7> netcdf_file;
+    std::array<std::string, 7> general_data_keys{"time", "r_sun", "lon_sun", "lat_sun", "r_moon", "lon_moon", "lat_moon"};
     std::array<double, 7> general_buffer;
-    std::array<double, grid_size> occult_buffer;
-    std::array<u_int8_t, grid_size> classif_buffer;
+    heap_array<double, grid_size> occult_buffer;
+    heap_array<u_int8_t, grid_size> classif_buffer;
 
     std::cout << "Starting integration with dt = " << dt << " seconds for a total time of " << T << " seconds (" << T/60/60/24/365.25 << " years) (" << K << " steps)." << "\n" << std::endl;
 
