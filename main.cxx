@@ -39,7 +39,7 @@ int main() {
         // position time derivative
         VectorArray<N> v;
         for (unsigned i = 0; i < N; i++) {
-            v.row(i) = bodies.Getv(i);
+            v.row(i) = bodies[i].Getv();
         }
         return v;
     };
@@ -60,18 +60,18 @@ int main() {
         double ewyer;
 
         for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies.Getx(i);
-            const double& Mx = bodies.GetM(i);
-            const double& Rx = bodies.GetR(i);
-            const double& J2x = bodies.GetJ2(i);
-            const Vector ewx = bodies.GetAxis(i);
+            const Vector& x = bodies[i].Getx();
+            const double& Mx = bodies[i].GetM();
+            const double& Rx = bodies[i].GetR();
+            const double& J2x = bodies[i].GetJ2();
+            const Vector ewx = bodies[i].GetAxis();
 
             for (unsigned j = 0; j < i; j++) {
-                const Vector& y = bodies.Getx(j);
-                const double& My = bodies.GetM(j);
-                const double& Ry = bodies.GetR(j);
-                const double& J2y = bodies.GetJ2(j);
-                const Vector ewy = bodies.GetAxis(j);
+                const Vector& y = bodies[j].Getx();
+                const double& My = bodies[j].GetM();
+                const double& Ry = bodies[j].GetR();
+                const double& J2y = bodies[j].GetJ2();
+                const Vector ewy = bodies[j].GetAxis();
 
                 r_vec = y - x;
                 r = r_vec.norm();
@@ -101,7 +101,7 @@ int main() {
         // rotation angle time derivative
         VectorArray<N> w;
         for (unsigned i = 0; i < N; i++) {
-            w.row(i) = bodies.Getw(i);
+            w.row(i) = bodies[i].Getw();
         }
         return w;
     };
@@ -121,16 +121,16 @@ int main() {
         double ewer;
 
         for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies.Getx(i);
-            const double& alpha = bodies.Getorient(i)(1);
-            const double& delta = bodies.Getorient(i)(2);
-            const Vector& L = bodies.GetL(i);
-            const double& Mx = bodies.GetM(i);
-            const double& Ixy = bodies.GetIxy(i);
-            const double& Iz = bodies.GetIz(i);
-            const double& R = bodies.GetR(i);
-            const double& J2 = bodies.GetJ2(i);
-            const Vector ew = bodies.GetAxis(i);
+            const Vector& x = bodies[i].Getx();
+            const double& alpha = bodies[i].Getorient()(1);
+            const double& delta = bodies[i].Getorient()(2);
+            const Vector& L = bodies[i].GetL();
+            const double& Mx = bodies[i].GetM();
+            const double& Ixy = bodies[i].GetIxy();
+            const double& Iz = bodies[i].GetIz();
+            const double& R = bodies[i].GetR();
+            const double& J2 = bodies[i].GetJ2();
+            const Vector ew = bodies[i].GetAxis();
 
             const Vector ealpha(-sin(alpha), cos(alpha), 0.0);
             const Vector edelta(-sin(delta)*cos(alpha), -sin(delta)*sin(alpha), cos(delta));
@@ -142,8 +142,8 @@ int main() {
 
             for (unsigned j = 0; j < N; j++) {
                 if (j == i) {continue;}
-                const Vector& y = bodies.Getx(j);
-                const double& My = bodies.GetM(j);
+                const Vector& y = bodies[j].Getx();
+                const double& My = bodies[j].GetM();
 
                 r_vec = y - x;
                 r = r_vec.norm();

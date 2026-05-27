@@ -62,11 +62,6 @@ private:
     // function that gives L_dot(x, p)
     std::function<VectorArray<N>(const BodyArray<N>&)> L_dot_;
 
-    // vector that stores the times for which values were calculated
-    std::vector<double> T_;
-    // vector that stores the computed bodies
-    std::vector<BodyArray<N>> Bodies_;
-
     // current time
     double t_;
     // current bodies
