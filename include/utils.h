@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <cstdint>
 
 #include <erfa.h>
 #include <Eigen/Dense>
@@ -476,7 +477,7 @@ double disks_intersection_area(double R1, double R2, double d) {
 template<size_t grid_size>
 void compute_local_occultations(const Body &earth, const Body &moon,  const Body &sun,
                                 const heap_array<double, grid_size> &lon_grid, const heap_array<double, grid_size> &lat_grid,
-                                heap_array<double, grid_size> &occult_buffer, heap_array<u_int8_t, grid_size> &classif_buffer) {
+                                heap_array<double, grid_size> &occult_buffer, heap_array<uint8_t, grid_size> &classif_buffer) {
     // compute the occultation ratios of the sun at different points on the earth
     // thereby ignore day and night, i.e. pretend that one can look through the earth and see the eclipse even though its night
     // (this is just so darkness due to eclipse and darkness due to night are not mixed up)
@@ -531,7 +532,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
         occult_buffer[i] = disks_intersection_area(R_sun, R_moon_scaled, d_moon_scaled) /A_sun;
 
         // classify the eclipse topology: no eclipse(0), partial(1), annular(2), total(3)
-        u_int8_t topology;
+        uint8_t topology;
         if (d_moon_scaled > R_sun + R_moon_scaled) {
             topology = 0; // no eclipse
         }
@@ -547,7 +548,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
 
         // sort the clockwise angle of the moon relative to the sun (0° being north) into 6° bins
         double angle = atan3(d_moon_orthogonal_eastwest, d_moon_orthogonal_southnorth);
-        u_int8_t angle_binned = floor(angle*30.0/M_PI);
+        uint8_t angle_binned = floor(angle*30.0/M_PI);
 
         // combine topology and angle into a combined classification
         classif_buffer[i] = 4*angle_binned + topology;
@@ -737,15 +738,20 @@ public:
         nc_def_var(ncid_, "lon_grid", NC_DOUBLE, 1, &grid_dim_, &lon_grid_id_);
         nc_def_var(ncid_, "lat_grid", NC_DOUBLE, 1, &grid_dim_, &lat_grid_id_);
         int matrix_dim[2] = {step_dim_, grid_dim_};
-        nc_def_var(ncid_, "occultation_data", NC_DOUBLE, 2, matrix_dim, &occult_id_);
         nc_def_var(ncid_, "classification_data", NC_UBYTE, 2, matrix_dim, &classif_id_);
+        nc_def_var(ncid_, "occultation_data", NC_USHORT, 2, matrix_dim, &occult_id_);
+        // add scale_factor and add_offset attributes to occultation_data
+        double occult_scale_factor = 1.0 / (pow(2,16)-1);
+        double occult_add_offset = 0.0;
+        nc_put_att_double(ncid_, occult_id_, "scale_factor", NC_DOUBLE, 1, &occult_scale_factor);
+        nc_put_att_double(ncid_, occult_id_, "add_offset", NC_DOUBLE, 1, &occult_add_offset);
+
+        // close file definition mode
+        nc_enddef(ncid_);
 
         // initialize the start_ variables
         general_start_ = 0;
         matrix_start_[0] = 0, matrix_start_[1] = 0;
-
-        // close file definition mode
-        nc_enddef(ncid_);
 
         // write the lon and lat grids
         nc_put_var_double(ncid_, lon_grid_id_, lon_grid.data());
@@ -765,7 +771,7 @@ public:
 
     void write_step(const std::array<double, general_size> &general_data,
                     const heap_array<double, grid_size> &occult_data,
-                    const heap_array<u_int8_t, grid_size> &classif_data) {
+                    const heap_array<uint8_t, grid_size> &classif_data) {
 
         // check for active file
         if (!file_active) {
@@ -776,12 +782,19 @@ public:
         for (size_t i = 0; i < general_size; i++) {
             nc_put_vara_double(ncid_, general_ids_[i], &general_start_, &general_count_, &general_data[i]);
         }
-        general_start_ += general_count_;
+        general_start_ += general_count_; // increment the start tracker
 
-        // write the occultation and classification data
-        nc_put_vara_double(ncid_, occult_id_, matrix_start_, matrix_count_, occult_data.data());
+        // write the classification data
         nc_put_vara_uchar(ncid_, classif_id_, matrix_start_, matrix_count_, classif_data.data());
-        matrix_start_[0] += matrix_count_[0];
+
+        // before writing the occultation data first compress it into the uint16 representation
+        for (size_t i = 0; i < grid_size; i++) {
+            occult_write_buffer_[i] = static_cast<uint16_t>(occult_data[i] *(pow(2,16)-1) + 0.5);
+        }
+        // write the compressed occultation data
+        nc_put_vara_ushort(ncid_, occult_id_, matrix_start_, matrix_count_, occult_write_buffer_.data());
+
+        matrix_start_[0] += matrix_count_[0]; // increment the start tracker
     }
 
 private:
@@ -794,6 +807,7 @@ private:
     int occult_id_, classif_id_;
     size_t matrix_start_[2];
     const size_t matrix_count_[2]{1, grid_size};
+    heap_array<uint16_t, grid_size> occult_write_buffer_;
     bool file_active;
 };
 
@@ -802,7 +816,7 @@ private:
 void write_intersections_to_NetCDF(std::string file_path,
                                     const std::map<std::string, std::vector<double>> &general_data,
                                     const std::array<std::vector<double>, 6> &points,
-                                    const std::array<std::vector<u_int64_t>, 3> &offsets)
+                                    const std::array<std::vector<uint64_t>, 3> &offsets)
 {
     // create NetCDF file
     int ncid;
@@ -848,7 +862,7 @@ void write_intersections_to_NetCDF(std::string file_path,
 
         const std::vector<double> &lon = points[2*i];
         const std::vector<double> &lat = points [2*i+1];
-        const std::vector<u_int64_t> &offset = offsets[i];
+        const std::vector<uint64_t> &offset = offsets[i];
         if (lon.size() != lat.size()) { // check that lon and lat have same length
             throw std::invalid_argument("NetCDF: group " + grp_name + ": lon(" + std::to_string(lon.size()) + ") and lat(" + std::to_string(lat.size()) + ") must have the same size.");
         }
@@ -885,7 +899,7 @@ void write_intersections_to_NetCDF(std::string file_path,
 
         const std::vector<double> &lon = points[2*i];
         const std::vector<double> &lat = points [2*i+1];
-        const std::vector<u_int64_t> &offset = offsets[i];
+        const std::vector<uint64_t> &offset = offsets[i];
 
         // write lon and lat
         nc_put_var_double(grp_id, lon_id, lon.data());
