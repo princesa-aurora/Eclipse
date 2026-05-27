@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib
 matplotlib.use("Agg") 
@@ -12,13 +13,14 @@ import imageio
 from utils import *
 
 
-file_path = "/home/aurora/eclipse_data/22.05.2026_20:12:50/solar_eclipse_of_5.2.2000.nc"
-anim_path = "/home/aurora/eclipse_data/22.05.2000_south_pole_fixed.mp4"
-
 # specify location to be kept fixed
 center_lon_deg = 0
 center_lat_deg = -90
 
+file_path = "/data/eclipse_data/27.05.2026_14:46:40/solar_eclipse_of_5.2.2000.nc"
+
+anim_path = os.path.join("/home/aurora/eclipse_data", file_path.split('/')[-2], file_path.split('/')[-1][:-3] + f"_location_fixed({center_lon_deg}, {center_lat_deg}).mp4")
+os.mkdir(os.path.split(anim_path)[0])
 
 
 dataset = xr.open_dataset(file_path)
@@ -99,8 +101,6 @@ fig.patch.set_facecolor('black')
 # set up the Orthographic (spherical globe) projection
 projection = ccrs.Orthographic(central_longitude=center_lon_deg, central_latitude=center_lat_deg)
 
-#ax = fig.add_subplot(1, 1, 1, projection=projection, frameon=False)
-
 # create the axes and explicitly strip out the default rectangular box border
 ax = plt.axes(projection=projection, frameon=False)
 ax.set_global()
@@ -134,6 +134,9 @@ gridlines = ax.gridlines(
 )
 gridlines.xlocator = plt.MultipleLocator(15)
 gridlines.ylocator = plt.MultipleLocator(15)
+
+# plot the central point
+ax.scatter(0, 0, color="crimson", marker="x", zorder=3)
 
 # initialize the actual animated layers: the shadow and the udner-sun point
 shadow_plot = ax.imshow(np.zeros(shape=(*lat_mesh.shape, 4)), origin="upper", transform=ccrs.PlateCarree(), extent=[-180,180,-90,90], zorder=2)

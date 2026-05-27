@@ -6,7 +6,7 @@ import PIL
 from utils import *
 
 
-file_path = "/home/aurora/eclipse_data/25.05.2026_04:24:13/solar_eclipse_of_5.2.2000.nc"
+file_path = "/data/eclipse_data/27.05.2026_14\:46\:40/solar_eclipse_of_5.2.2000.nc"
 
 lon_observ_deg = 0
 lat_observ_deg = -90

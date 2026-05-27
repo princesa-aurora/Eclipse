@@ -382,9 +382,9 @@ std::pair<std::string, std::string> jdtt_to_utc_date_and_time(double jdtt) {
     int sec = day_fraction * 24*60*60 - hour*60*60 - minute*60;
 
     // format into date string and return
-    std::string date = std::to_string(day) + "." + std::to_string(month) + "." + std::to_string(year);
-    std::string time = std::to_string(hour) + ":" + std::to_string(minute) + ":" + std::to_string(sec);
-    
+    std::string date = std::format("{:02}", day) + "." + std::format("{:02}", month) + "." + std::format("{:02}", year);
+    std::string time = std::format("{:02}", hour) + "-" + std::format("{:02}", minute) + "-" + std::format("{:02}", sec);
+
     return std::make_pair(date, time);
 }
 

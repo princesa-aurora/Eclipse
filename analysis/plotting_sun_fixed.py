@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib
 matplotlib.use("Agg") 
@@ -12,9 +13,10 @@ import imageio
 from utils import *
 
 
-file_path = "/home/aurora/eclipse_data/22.05.2026_20:12:50/solar_eclipse_of_5.2.2000.nc"
-anim_path = "/home/aurora/eclipse_data/22.05.2026_sun_fixed.mp4"
+file_path = "/data/eclipse_data/27.05.2026_14\:46\:40/solar_eclipse_of_5.2.2000.nc"
 
+anim_path = os.path.join("/home/aurora/eclipse_data", file_path.split('/')[-2], file_path.split('/')[-1][:-3] + "_sun_fixed.mp4")
+os.mkdir(os.path.split(anim_path)[0])
 
 
 dataset = xr.open_dataset(file_path)
@@ -61,8 +63,6 @@ def draw_frame(idx, fig):
 
     # set up the Orthographic (spherical globe) projection
     projection = ccrs.Orthographic(central_longitude=sun_lon_deg, central_latitude=sun_lat_deg)
-
-    #ax = fig.add_subplot(1, 1, 1, projection=projection, frameon=False)
 
     # create the axes and explicitly strip out the default rectangular box border
     ax = plt.axes(projection=projection, frameon=False)

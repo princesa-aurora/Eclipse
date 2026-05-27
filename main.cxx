@@ -28,9 +28,9 @@ const size_t grid_size = 1e5;
 
 int main() {
     // name and create output folder using a timestamp
-    std::string timestamp = std::format("{:%d.%m.%Y_%H:%M:%S}",
+    std::string timestamp = std::format("{:%d.%m.%Y_%H-%M-%S}",
                                         std::chrono::time_point_cast<std::chrono::seconds>(std::chrono::system_clock::now()));
-    fs::path folder = "/home/aurora/eclipse_data" / fs::path(timestamp);
+    fs::path folder = "/data/eclipse_data" / fs::path(timestamp);
     fs::create_directory(folder);
 
 
@@ -189,7 +189,7 @@ int main() {
     double dist;
     double min_dist;
     fs::path file_path;
-    fs::path temp_path = folder / "eclipe_temp.nc";
+    fs::path temp_path = folder / "eclipse_temp.nc";
     Eclipse_NetCDF<grid_size, 7> netcdf_file;
     std::array<std::string, 7> general_data_keys{"time", "r_sun", "lon_sun", "lat_sun", "r_moon", "lon_moon", "lat_moon"};
     std::array<double, 7> general_buffer;
