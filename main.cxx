@@ -18,11 +18,21 @@ const size_t N = 10; // number of bodies in the system
 const double t0 = 0.0; // seconds since J2000.0 epoch
 const BodyArray<N> initial_bodies(heap_array{{Sun, Earth, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune}});
 
-const double dt = 60.0;
-const double T = 50.0 * 365.25 * 24 * 60 * 60;
-const size_t K = T/dt;
+// start and end dates of the eclipse analysis season
+const std::string start_date = "03.02.2000";
+const std::string end_date = "07.02.2000";
+const double T_start = utc_date_and_time_to_j2000(start_date, "00-00-00");
+const double T_end = utc_date_and_time_to_j2000(end_date, "00-00-00");
 
+// step sizes: dt1 default, dt2 during eclipse analysis
+const double dt1 = 60.0;
+const double dt2 = 30.0;
+
+// number of points in Fibonacci sphere for eclipse analysis
 const size_t grid_size = 1e5;
+
+// refresh interval for catching up phase progress indicator
+size_t progress_refresh_interval =  7*24*60*60 /dt1;
 
 
 
@@ -183,8 +193,9 @@ int main() {
         lat_grid[i] = asin(1.0 - double(2*i+1)/grid_size);
     }
 
+    size_t iteration_counter = 0;
     bool solar_eclipse = false;
-    bool solar_eclipse_active = false;
+    bool analysis_active = false;
     double t_max;
     double dist;
     double min_dist;
@@ -196,34 +207,70 @@ int main() {
     heap_array<double, grid_size> occult_buffer;
     heap_array<u_int8_t, grid_size> classif_buffer;
 
-    std::cout << "Starting integration with dt = " << dt << " seconds for a total time of " << T << " seconds (" << T/60/60/24/365.25 << " years) (" << K << " steps)." << "\n" << std::endl;
+    std::cout << "Catching up to eclipse anaylsis window which starts at " << start_date << " 00-00-00 UTC." << std::endl;
+    // do catching-up integration
+    while (t <= T_start - dt1) {
+        // keep going until just before the analysis window opens
 
-    // start integration loop
-    for (size_t i = 0; i < K; i++) {
-        solver.MakeStep(dt);
+        iteration_counter++;
+        solver.MakeStep(dt1);
 
-        solar_eclipse = eclipsed(sun, moon, earth);
+        if ((iteration_counter % progress_refresh_interval) == 0) {std::cout << "\r\033[2K" << "Currently at: " << j2000_to_utc_date(t) << std::flush;}
+    }
+    std::cout << "\r\033[2K" << std::endl;
+    // if at the beginning of the analysis window an eclipse is ongoing skip ahead till it has ended
+    // since that eclipse would be only recorded incompletely so we may just throw it away entirely
+    if (eclipsed(sun, moon, earth)) {
+        std::cout << "Note: at the beginning of the eclipse analysis window there is an ongoing eclipse."
+                  << "As it can't be analyzed completely it is skipped entirely."
+                  << "Did you maybe set the window slighly too late?" << std::endl;
+        while (eclipsed(sun, moon, earth)) {
+            solver.MakeStep(dt1);
+        }
+    }
 
-        if (solar_eclipse && !solar_eclipse_active) {
-            std::cout << "detected solar eclipse start at time " << j2000_to_utc_datetime(t) << "." << std::endl;
+    std::cout << "Reached the start of the eclipse analysis window.\n"
+              << "Now checking for and analyzing eclipses until the end of the analysis window at " << end_date << " 00-00-00 UTC.\n" << std::endl;
+    // do eclipse search and anaylsis
+    while ((t < T_end) || analysis_active) {
+        // keep going until the analysis window closes,
+        // once the window is closed finish the last analysis before stopping
+
+        iteration_counter++;
+        solver.MakeStep(analysis_active ? dt2 : dt1);
+
+        solar_eclipse = eclipsed(sun, moon, earth); // check for an eclipse
+
+        if (solar_eclipse && !analysis_active) {
+            // a solar eclipse is detected and we're currently not in analysis mode
+            analysis_active = true; // start analysis mode
+
+            std::cout << "Solar eclipse analysis triggered at " << j2000_to_utc_datetime(t) << ".\n"
+                      << "Refining last step to narrow down start time." << std::endl;
+            while(eclipsed(sun, moon, earth)) {
+                solver.MakeStep(-dt2);
+            }
+            solver.MakeStep(dt2);
+            std::cout << "Detected solar eclipse start at time " << j2000_to_utc_datetime(t) << "." << std::endl;
 
             min_dist = INFINITY; // start min_dist at infinity
-
-            netcdf_file.create_new_file(temp_path, general_data_keys, lon_grid, lat_grid);
+            netcdf_file.create_new_file(temp_path, general_data_keys, lon_grid, lat_grid); // create new file for the analysis
         }
-        if (!solar_eclipse && solar_eclipse_active) {
-            std::cout << "detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << "." << std::endl;
-            std::cout << "detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
 
-            netcdf_file.close_file();
+        if (!solar_eclipse && analysis_active) {
+            // no solar eclipse is detected and we're currently in analysis mode
+            analysis_active = false; // else end analysis mode
 
+            std::cout << "Detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << "." << std::endl;
+            std::cout << "Detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
+
+            netcdf_file.close_file(); // close output file
             file_path = folder / ("solar_eclipse_of_" + j2000_to_utc_date(t_max) + ".nc");
-            // move temp_path to file_path
-            std::rename(temp_path.c_str(), file_path.c_str());
+            // move output file from temp_path to file_path
+            fs::rename(temp_path.c_str(), file_path.c_str());
         }
-        solar_eclipse_active = solar_eclipse;
 
-        if (solar_eclipse) {
+        if (analysis_active) { // collection of analyses to be performed in analysis mode
             // compute distance of sun-moon axis to earths center to check for maximum eclipse time
             dist = compute_shadow_axis_distance_to_earth_center(earth, moon, sun);
             if (dist < min_dist) {
@@ -245,10 +292,10 @@ int main() {
             // write data to the file
             netcdf_file.write_step(general_buffer, occult_buffer, classif_buffer);
         }
-
     }
 
-    std::cout << "Integration complete." << std::endl;
+    std::cout << "Reached the end of the eclipse analysis window.\n"
+              << "Done, did a total of " << iteration_counter << " iterations." << std::endl;
 }
 
 

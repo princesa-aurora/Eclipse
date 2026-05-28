@@ -1,3 +1,4 @@
+#include <iostream>
 #include <array>
 #include <stdexcept>
 #include <cmath>
@@ -5,6 +6,7 @@
 #include <vector>
 #include <map>
 #include <cstdint>
+#include <sstream>
 
 #include <erfa.h>
 #include <Eigen/Dense>
@@ -407,6 +409,57 @@ std::string j2000_to_utc_date(double j2000_seconds) {
 }
 
 
+double utc_date_and_time_to_jdtt(std::string date_str, std::string time_str) {
+    // convert a UTC date and time string to the corresponding Julian Day of TT
+
+    // extract year, month and day from the date string
+    int year, month, day;
+    char delim;
+    std::stringstream date_ss(date_str);
+    date_ss >> day >> delim >> month >> delim >> year;
+
+    // extract hours, minutes and seconds
+    int hour, minute, sec;
+    std::stringstream time_ss(time_str);
+    time_ss >> hour >> delim >> minute >> delim >> sec;
+
+    // construct day fraction
+    double day_fraction = (hour / 24.0) + (minute / (24.0 * 60.0)) + (sec / (24.0 * 60.0 * 60.0));
+
+    // convert date to JD UTC
+    double utc_int, utc_frac;
+    eraCal2jd(year, month, day, &utc_int, &utc_frac);
+
+    // add the day fraction
+    utc_frac += day_fraction;
+    if (utc_frac >= 1.0) {
+        utc_frac -= 1.0;
+        utc_int += 1.0;
+    }
+
+    // convert UTC to TAI
+    double tai_int, tai_frac;
+    eraUtctai(utc_int, utc_frac, &tai_int, &tai_frac);
+
+    // convert TAI to TT
+    double tt_int, tt_frac;
+    eraTaitt(tai_int, tai_frac, &tt_int, &tt_frac);
+
+    // return JD TT
+    return tt_int + tt_frac;
+}
+
+double utc_date_and_time_to_j2000(std::string date_str, std::string time_str) {
+    // convert a UTC dat eand time string to seconds since the J2000.0 epoch
+
+    double jdtt = utc_date_and_time_to_jdtt(date_str, time_str);
+
+    double j2000_seconds = (jdtt - 2451545.0) *86400.0 ; // convert to seconds since J2000.0
+
+    return j2000_seconds;
+}
+
+
 
 double compute_sun_zenith(double lon, double lat, const Body &earth, const Body &sun) {
     // at lon, lat on earths surface what is the zenith of the sun?
@@ -699,7 +752,7 @@ class Eclipse_NetCDF {
 public:
     Eclipse_NetCDF() {
         // just instantiate the class, but no file yet
-        file_active = false;
+        file_active_ = false;
 
         // do some sanity checks
         if (general_size == 0) {
@@ -714,11 +767,16 @@ public:
         if (ncid_ >= 0) {nc_close(ncid_);}
     }
 
+    bool is_open() const {
+        return file_active_;
+
+    }
+
     void create_new_file(std::string file_path, std::array<std::string, general_size> general_data_keys,
                     const heap_array<double, grid_size> &lon_grid, const heap_array<double, grid_size> &lat_grid) {
 
         // check for active file
-        if (file_active) {
+        if (file_active_) {
             throw std::runtime_error("please close the currently active file before creating a new one.");
         }
         // create a new NetCDF file
@@ -758,15 +816,15 @@ public:
         nc_put_var_double(ncid_, lat_grid_id_, lat_grid.data());
 
         // set file_active flag
-        file_active = true;
+        file_active_ = true;
     }
 
     void close_file() {
         // close file
         if (ncid_ >= 0) {nc_close(ncid_);}
 
-        // reset file_active flag
-        file_active = false;
+        // reset the file_active flag
+        file_active_ = false;
     }
 
     void write_step(const std::array<double, general_size> &general_data,
@@ -774,7 +832,7 @@ public:
                     const heap_array<uint8_t, grid_size> &classif_data) {
 
         // check for active file
-        if (!file_active) {
+        if (!file_active_) {
             throw std::runtime_error("NetCDF: cannot write when no active file is present.");
         }
 
@@ -808,7 +866,7 @@ private:
     size_t matrix_start_[2];
     const size_t matrix_count_[2]{1, grid_size};
     heap_array<uint16_t, grid_size> occult_write_buffer_;
-    bool file_active;
+    bool file_active_;
 };
 
 
