@@ -1,62 +1,91 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
-import PIL
+from tqdm import tqdm
 
 from utils import *
 
 
-file_path = "/data/eclipse_data/27.05.2026_14\:46\:40/solar_eclipse_of_5.2.2000.nc"
+file_path = "/data/eclipse_data/28.05.2026_18-36-25/solar_eclipse_of_05.02.2000.nc"
 
 
-dataset = xr.open_dataset(file_path)
+dataset = xr.open_dataset(file_path, chunks={"steps": 1, "grid": -1})
 
 times = dataset["time"].values
 sun_lon = dataset["lon_sun"].values
 sun_lat = dataset["lat_sun"].values
+num_steps = times.shape[0]
+dt = (times[-1]-times[0])/num_steps
 
 lon_grid = dataset["lon_grid"].values
 lat_grid = dataset["lat_grid"].values
+grid_size = lat_grid.shape[0]
 
-classification_data = dataset["classification_data"].values
-topology_data = np.mod(classification_data, 4)
-angle_data = (classification_data - topology_data) /4
+classification_data = dataset["classification_data"].data
 
 dataset.close()
 
-day_mask = (np.cos(lat_grid[None,:])*np.cos(sun_lat[:,None])*np.cos(lon_grid[None,:]-sun_lon[:,None]) + np.sin(lat_grid[None,:])*np.sin(sun_lat[:,None]) > 0)
+
+visibility_start_idcs = np.full(lat_grid.shape, num_steps, dtype=int)
+visibility_end_idcs = np.full(lat_grid.shape, num_steps, dtype=int)
+annularity_start_idcs = np.full(lat_grid.shape, num_steps, dtype=int)
+annularity_end_idcs = np.full(lat_grid.shape, num_steps, dtype=int)
+totality_start_idcs = np.full(lat_grid.shape, num_steps, dtype=int)
+totality_end_idcs = np.full(lat_grid.shape, num_steps, dtype=int)
+
+for i in tqdm(range(num_steps), desc="Processing steps"):
+    classification_chunk = classification_data[i].compute()
+    topology_chunk = np.mod(classification_chunk, 4)
+
+    # compute day mask
+    day_mask = (np.cos(lat_grid)*np.cos(sun_lat[i])*np.cos(lon_grid-sun_lon[i]) + np.sin(lat_grid)*np.sin(sun_lat[i]) > 0)
+
+    # visibility:
+    # compute visibility mask (both eclipse topology must be nonzero and it must be day)
+    visibility_mask = (topology_chunk > 0)
+    visibility_mask = np.logical_and(visibility_mask, day_mask)
+    # find start and end indices:
+    # end_idcs gets set until the last True (per location), so ultimately its value is the index of the last True
+    # start_idcs gets set until the first True (per location), so ultimately its value is the index of the first True
+    # (this is since then end_idcs gets set for the first time and is not num_steps any more in the next step)
+    visibility_start_idcs[visibility_end_idcs==num_steps] = i
+    visibility_end_idcs[visibility_mask] = i
+
+    # annularity
+    annularity_mask = (topology_chunk == 2)
+    annularity_mask = np.logical_and(annularity_mask, day_mask)
+    annularity_start_idcs[annularity_end_idcs==num_steps] = i
+    annularity_end_idcs[annularity_mask] = i
+
+    # totality
+    totality_mask = (topology_chunk == 2)
+    totality_mask = np.logical_and(totality_mask, day_mask)
+    totality_start_idcs[totality_end_idcs==num_steps] = i
+    totality_end_idcs[totality_mask] = i
+
+
+# Some comments on edge cases:
+# when the eclipse is visible/annular/total already at the first step (at some location):
+# start_idx = 0, end_idx = last => all good
+# when the eclipse is visible/annular/total until the last step (at some location):
+# start_idx = first, end_idx = num_steps-1 => all good
+# when the eclipse is never visible/annular/total (at some location):
+# start_idx = num_steps-1, end_idx = num_steps => end_idx out ouf range
+# => need to manually mask those positions and set the times to 0
+
+# note the +dt is since end_idx is the last one where the eclipse is visible/annular/total,
+# not the first one after that as is usual in programming
+visibility_times = np.zeros(lat_grid.shape)
+visibility_times[visibility_end_idcs!=num_steps] = times[visibility_end_idcs[visibility_end_idcs!=num_steps]] - times[visibility_start_idcs[visibility_end_idcs!=num_steps]] +dt
+
+annularity_times = np.zeros(lat_grid.shape)
+annularity_times[annularity_end_idcs!=num_steps] = times[annularity_end_idcs[annularity_end_idcs!=num_steps]] - times[annularity_start_idcs[annularity_end_idcs!=num_steps]] +dt
+
+totality_times = np.zeros(lat_grid.shape)
+totality_times[totality_end_idcs!=num_steps] = times[totality_end_idcs[totality_end_idcs!=num_steps]] - times[totality_start_idcs[totality_end_idcs!=num_steps]] +dt
+
+
 land_mask = is_on_land(lon_grid, lat_grid)
-
-
-# for every point compute the total timespan for which the eclipse is visible
-visibility_mask = (topology_data > 0)
-visibility_mask = np.logical_and(visibility_mask, day_mask)
-start_idcs = np.argmax(visibility_mask, axis=0)
-end_idcs = len(visibility_mask)-1 - np.argmax(visibility_mask[::-1], axis=0)
-visibility_times = times[end_idcs] - times[start_idcs]
-# the above calculation returns nonsense at locations where the eclipse isn't visible at any time
-# so we mask those locations and set the time manually to 0
-visibility_times[np.all(~visibility_mask, axis=0)] = 0
-
-# for every point compute the timespan for which the eclipse is annular
-annularity_mask = (topology_data == 2)
-annularity_mask = np.logical_and(annularity_mask, day_mask)
-start_idcs = np.argmax(annularity_mask, axis=0)
-end_idcs = len(annularity_mask)-1 - np.argmax(annularity_mask[::-1], axis=0)
-annularity_times = times[end_idcs] - times[start_idcs]
-# the above calculation returns nonsense at locations where the eclipse isn't annular at any time
-# so we mask those locations and set the time manually to 0
-annularity_times[np.all(~annularity_mask, axis=0)] = 0
-
-# for every point compute the timespan for which the eclipse is total
-totality_mask = (topology_data == 3)
-totality_mask = np.logical_and(totality_mask, day_mask)
-start_idcs = np.argmax(totality_mask, axis=0)
-end_idcs = len(totality_mask)-1 - np.argmax(totality_mask[::-1], axis=0)
-totality_times = times[end_idcs] - times[start_idcs]
-# the above calculation returns nonsense at locations where the eclipse isn't total at any time
-# so we mask those locations and set the time manually to 0
-totality_times[np.all(~totality_mask, axis=0)] = 0
 
 
 if (visibility_times == 0).all():

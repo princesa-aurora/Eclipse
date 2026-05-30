@@ -1,33 +1,31 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import xarray as xr
-import PIL
+from tqdm import tqdm
 
 from utils import *
 
 
-file_path = "/data/eclipse_data/27.05.2026_14\:46\:40/solar_eclipse_of_5.2.2000.nc"
+file_path = "/data/eclipse_data/28.05.2026_18-36-25/solar_eclipse_of_05.02.2000.nc"
 
 lon_observ_deg = 0
 lat_observ_deg = -90
 
 
-dataset = xr.open_dataset(file_path)
+dataset = xr.open_dataset(file_path, chunks={"steps": 1, "grid": -1})
 
 times = dataset["time"].values
 sun_lon = dataset["lon_sun"].values
 sun_lat = dataset["lat_sun"].values
-num_steps = len(times)
-minutes_after_start = (times-times[0])/60
+num_steps = times.shape[0]
+minutes_after_start = (times-times[0]) /60
 
 lon_grid = dataset["lon_grid"].values
 lat_grid = dataset["lat_grid"].values
-grid_size = len(lat_grid)
+grid_size = lat_grid.shape[0]
 
-occultation_data = dataset["occultation_data"].values
-classification_data = dataset["classification_data"].values
-topology_data = np.mod(classification_data, 4)
-angle_data = (classification_data - topology_data) /4 *6
+occultation_data = dataset["occultation_data"].data
+classification_data = dataset["classification_data"].data
 
 dataset.close()
 
@@ -43,9 +41,14 @@ local_day_mask = (np.cos(lat_observ)*np.cos(sun_lat)*np.cos(lon_observ-sun_lon) 
 nearest_idx = get_nearest_idcs(lon_grid, lat_grid,
                                 lon_observ, lat_observ, k=1)
 
-local_occults = occultation_data[:, nearest_idx] *100 # local occultation rates in percent
-local_topologies = topology_data[:, nearest_idx]
-local_angles = angle_data[:, nearest_idx]
+local_occults = np.zeros(times.shape, dtype=float)
+local_topologies = np.zeros(times.shape, dtype=float)
+local_angles = np.zeros(times.shape, dtype=float)
+for i in tqdm(range(num_steps), "Processing steps"):
+    local_occults[i] = occultation_data[i, nearest_idx].compute() *100 # local occultation rates in percent
+    local_classif = classification_data[i, nearest_idx].compute()
+    local_topologies[i] = np.mod(local_classif, 4)
+    local_angles[i] = int(local_classif /4) *6
 
 
 # plot the local occultation rate
@@ -81,7 +84,6 @@ ax2.set_ylim(0, 360)
 
 # plote the binned angle data
 ax2.fill_between(minutes_after_start, local_angles, local_angles+6, alpha=0.7, color='mediumseagreen')
-
 
 # finish the plot
 ax.grid()

@@ -17,27 +17,35 @@ from utils import *
 center_lon_deg = 0
 center_lat_deg = -90
 
-file_path = "/data/eclipse_data/27.05.2026_14:46:40/solar_eclipse_of_5.2.2000.nc"
+file_path = "/data/eclipse_data/28.05.2026_18-36-25/solar_eclipse_of_05.02.2000.nc"
 
-anim_path = os.path.join("/home/aurora/eclipse_data", file_path.split('/')[-2], file_path.split('/')[-1][:-3] + f"_location_fixed({center_lon_deg}, {center_lat_deg}).mp4")
-os.mkdir(os.path.split(anim_path)[0])
+anim_dir = os.path.join("/home/aurora/eclipse_data", file_path.split('/')[-2])
+if not os.path.exists(anim_dir): # create the directory if it doesn't exist yet
+    os.mkdir(anim_dir)
+anim_path = os.path.join(anim_dir, file_path.split('/')[-1][:-3] + f"_location_fixed({center_lon_deg}, {center_lat_deg}).mp4")
+version = 0
+while os.path.exists(anim_path): # add a version number if the file already exists
+    version += 1
+    anim_path = anim_path[:-4] + f"({version})" + ".mp4"
 
 
-dataset = xr.open_dataset(file_path)
+dataset = xr.open_dataset(file_path, chunks={"steps": 1, "grid": -1})
 
 times = dataset["time"].values
 sun_lon = dataset["lon_sun"].values
 sun_lat = dataset["lat_sun"].values
-num_steps = len(times)
+num_steps = times.shape[0]
 
 lon_grid = dataset["lon_grid"].values
 lat_grid = dataset["lat_grid"].values
-grid_size = len(lat_grid)
+grid_size = lat_grid.shape[0]
 
-occultation_data = dataset["occultation_data"].values
+occultation_data = dataset["occultation_data"].data
 
 dataset.close()
 
+center_lon_rad = center_lon_deg * np.pi/180
+center_lat_rad = center_lat_deg * np.pi/180
 
 lon_mesh, lat_mesh = np.meshgrid(np.linspace(-np.pi, np.pi, 2000), np.linspace(np.pi/2, -np.pi/2, 1000))
 
@@ -45,11 +53,9 @@ lon_mesh, lat_mesh = np.meshgrid(np.linspace(-np.pi, np.pi, 2000), np.linspace(n
 nearest_idcs = get_nearest_idcs(lon_grid, lat_grid,
                                 lon_mesh, lat_mesh, k=1)
 
-
 # load background image of earth
 earth_image_path = "/home/aurora/Desktop/NE1_50M_SR_W.tif"
 earth_image = PIL.Image.open(earth_image_path)
-
 
 
 def draw_shadow(idx, ax, shadow_plot, under_sun_point_plot):
@@ -57,18 +63,17 @@ def draw_shadow(idx, ax, shadow_plot, under_sun_point_plot):
     sun_lon_rad = sun_lon[idx]
     sun_lat_rad = sun_lat[idx]
 
-    occults = occultation_data[idx]
-
     # compute the relative intensity of the sun
     sun_cos_zen = np.cos(lat_mesh)*np.cos(sun_lat_rad)*np.cos(lon_mesh-sun_lon_rad) + np.sin(lat_mesh)*np.sin(sun_lat_rad)
     sun_rel_intensity = np.maximum(0, sun_cos_zen)**0.7
 
-    # interpolate the occultation due to the eclipe
-    occult_interp = occults[nearest_idcs]
+    # interpolate the occultation due to the eclipse
+    occults = occultation_data[idx].compute()
+    occults_interp = occults[nearest_idcs]
 
     # plot the combined shadow (night and eclipse)
     shadow_image = np.zeros(shape=(*lat_mesh.shape, 4))
-    shadow_image[:,:,3] = 1 - sun_rel_intensity * (1-occult_interp)
+    shadow_image[:,:,3] = 1 - sun_rel_intensity * (1-occults_interp)
     shadow_plot.remove()
     shadow_plot = ax.imshow(shadow_image, origin="upper", transform=ccrs.PlateCarree(), extent=[-180,180,-90,90], zorder=2)
 
@@ -94,6 +99,8 @@ def draw_shadow(idx, ax, shadow_plot, under_sun_point_plot):
 
 # initialize an empty figure
 fig = plt.figure(figsize=(10, 10), dpi=112)
+plt.suptitle(os.path.split(file_path)[1][:-3].replace('_', ' ')
+            + f", centered at lon({center_lon_deg})°, lat({center_lat_deg})° ({get_location_name(center_lon_rad, center_lat_rad)}).")
 
 # make the background black
 fig.patch.set_facecolor('black')
@@ -138,7 +145,7 @@ gridlines.ylocator = plt.MultipleLocator(15)
 # plot the central point
 ax.scatter(0, 0, color="crimson", marker="x", zorder=3)
 
-# initialize the actual animated layers: the shadow and the udner-sun point
+# initialize the actual animated layers: the shadow and the under-sun point
 shadow_plot = ax.imshow(np.zeros(shape=(*lat_mesh.shape, 4)), origin="upper", transform=ccrs.PlateCarree(), extent=[-180,180,-90,90], zorder=2)
 under_sun_point_plot = ax.scatter([], [], color="orange", marker="*", transform=ccrs.PlateCarree(), zorder=3)
 

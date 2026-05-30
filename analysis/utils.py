@@ -163,4 +163,18 @@ def get_location_name(lon, lat):
 
 
 
+def mean_of_lons_and_lats(lons, lats):
+    # compute the mean of the positions in cartesian forms
+    # and then convert back to spherical
+
+    x = np.stack((np.cos(lats)*np.cos(lons), np.cos(lats)*np.sin(lons), np.sin(lats)), axis=-1)
+    x_mean = np.mean(x, axis=0)
+
+    lon_mean = np.arctan2(x_mean[1], x_mean[0])
+    lat_mean = np.arctan(x_mean[2]/np.sqrt(x_mean[0]**2+x_mean[1]**2))
+
+    return lon_mean, lat_mean
+
+
+
 

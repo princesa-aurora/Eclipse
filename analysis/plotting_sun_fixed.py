@@ -13,24 +13,30 @@ import imageio
 from utils import *
 
 
-file_path = "/data/eclipse_data/27.05.2026_14\:46\:40/solar_eclipse_of_5.2.2000.nc"
+file_path = "/data/eclipse_data/28.05.2026_18-36-25/solar_eclipse_of_05.02.2000.nc"
 
-anim_path = os.path.join("/home/aurora/eclipse_data", file_path.split('/')[-2], file_path.split('/')[-1][:-3] + "_sun_fixed.mp4")
-os.mkdir(os.path.split(anim_path)[0])
+anim_dir = os.path.join("/home/aurora/eclipse_data", file_path.split('/')[-2])
+if not os.path.exists(anim_dir): # create the directory if it doesn't exist yet
+    os.mkdir(anim_dir)
+anim_path = os.path.join(anim_dir, file_path.split('/')[-1][:-3] + "_sun_fixed.mp4")
+version = 0
+while os.path.exists(anim_path): # add a version number if the file already exists
+    version += 1
+    anim_path = anim_path[:-4] + f"({version})" + ".mp4"
 
 
-dataset = xr.open_dataset(file_path)
+dataset = xr.open_dataset(file_path, chunks={"steps": 1, "grid": -1})
 
 times = dataset["time"].values
 sun_lon = dataset["lon_sun"].values
 sun_lat = dataset["lat_sun"].values
-num_steps = len(times)
+num_steps = times.shape[0]
 
 lon_grid = dataset["lon_grid"].values
 lat_grid = dataset["lat_grid"].values
-grid_size = len(lat_grid)
+grid_size = lat_grid.shape[0]
 
-occultation_data = dataset["occultation_data"].values
+occultation_data = dataset["occultation_data"].data
 
 dataset.close()
 
@@ -41,11 +47,9 @@ lon_mesh, lat_mesh = np.meshgrid(np.linspace(-np.pi, np.pi, 2000), np.linspace(n
 nearest_idcs = get_nearest_idcs(lon_grid, lat_grid,
                                 lon_mesh, lat_mesh, k=1)
 
-
 # load background image of earth
 earth_image_path = "/home/aurora/Desktop/NE1_50M_SR_W.tif"
 earth_image = PIL.Image.open(earth_image_path)
-
 
 
 def draw_frame(idx, fig):
@@ -55,8 +59,6 @@ def draw_frame(idx, fig):
 
     sun_lon_deg = sun_lon_rad *180/np.pi
     sun_lat_deg = sun_lat_rad *180/np.pi
-
-    occults = occultation_data[idx]
 
     # make the background black
     fig.patch.set_facecolor('black')
@@ -102,12 +104,13 @@ def draw_frame(idx, fig):
     sun_cos_zen = np.cos(lat_mesh)*np.cos(sun_lat_rad)*np.cos(lon_mesh-sun_lon_rad) + np.sin(lat_mesh)*np.sin(sun_lat_rad)
     sun_rel_intensity = np.maximum(0, sun_cos_zen)**0.7
 
-    # interpolate the occultation due to the eclipe
-    occult_interp = occults[nearest_idcs]
+    # interpolate the occultation due to the eclipse
+    occults = occultation_data[idx].compute()
+    occults_interp = occults[nearest_idcs]
 
     # plot the combined shadow (night and eclipse)
     shadow_image = np.zeros(shape=(*lat_mesh.shape, 4))
-    shadow_image[:,:,3] = 1 - sun_rel_intensity * (1-occult_interp)
+    shadow_image[:,:,3] = 1 - sun_rel_intensity * (1-occults_interp)
     ax.imshow(shadow_image, origin="upper", transform=ccrs.PlateCarree(), extent=[-180,180,-90,90], zorder=2)
 
     # plot the under-sun point
@@ -127,9 +130,9 @@ def draw_frame(idx, fig):
 
 
 
-
 # initialize an empty figure
 fig = plt.figure(figsize=(10, 10), dpi=112)
+plt.suptitle(os.path.split(file_path)[1][:-3].replace('_', ' ') + ", centered below the sun")
 
 # use imageio to open a secure video container using its built-in ffmpeg binary
 print("Initializing Video Container with ImageIO...")
