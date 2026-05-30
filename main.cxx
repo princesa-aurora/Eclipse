@@ -252,24 +252,10 @@ int main() {
             while(eclipsed(sun, moon, earth)) {
                 solver.MakeStep(-dt2);
             }
-            solver.MakeStep(dt2);
-            std::cout << "Detected solar eclipse start at time " << j2000_to_utc_datetime(t) << "." << std::endl;
+            std::cout << "Detected solar eclipse start at time " << j2000_to_utc_datetime(t+dt2) << "." << std::endl;
 
             min_dist = INFINITY; // start min_dist at infinity
             netcdf_file.create_new_file(temp_path, general_data_keys, lon_grid, lat_grid); // create new file for the analysis
-        }
-
-        if (!solar_eclipse && analysis_active) {
-            // no solar eclipse is detected and we're currently in analysis mode
-            analysis_active = false; // else end analysis mode
-
-            std::cout << "\r\033[2K" << "Detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << ".\n"
-                      << "Detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
-
-            netcdf_file.close_file(); // close output file
-            file_path = folder / ("solar_eclipse_of_" + j2000_to_utc_date(t_max) + ".nc");
-            // move output file from temp_path to file_path
-            fs::rename(temp_path.c_str(), file_path.c_str());
         }
 
         if (analysis_active) { // collection of analyses to be performed in analysis mode
@@ -293,6 +279,19 @@ int main() {
 
             // write data to the file
             netcdf_file.write_step(general_buffer, occult_buffer, classif_buffer);
+        }
+
+        if (!solar_eclipse && analysis_active) {
+            // no solar eclipse is detected and we're currently in analysis mode
+            analysis_active = false; // else end analysis mode
+
+            std::cout << "\r\033[2K" << "Detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << ".\n"
+                      << "Detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
+
+            netcdf_file.close_file(); // close output file
+            file_path = folder / ("solar_eclipse_of_" + j2000_to_utc_date(t_max) + ".nc");
+            // move output file from temp_path to file_path
+            fs::rename(temp_path.c_str(), file_path.c_str());
         }
 
         // progress indicator
