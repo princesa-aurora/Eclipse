@@ -31,8 +31,9 @@ const double dt2 = 30.0;
 // number of points in Fibonacci sphere for eclipse analysis
 const size_t grid_size = 1e5;
 
-// refresh interval for catching up phase progress indicator
-size_t progress_refresh_interval =  7*24*60*60 /dt1;
+// refresh intervals for progress indicators
+size_t progress_refresh_interval_catchup = 3000;
+size_t progress_refresh_interval_analysis = 10;
 
 
 
@@ -215,7 +216,8 @@ int main() {
         iteration_counter++;
         solver.MakeStep(dt1);
 
-        if ((iteration_counter % progress_refresh_interval) == 0) {std::cout << "\r\033[2K" << "Currently at: " << j2000_to_utc_date(t) << std::flush;}
+        // progress indicator
+        if ((iteration_counter % progress_refresh_interval_catchup) == 0) {std::cout << "\r\033[2K" << "Currently at: " << j2000_to_utc_date(t) << std::flush;}
     }
     std::cout << "\r\033[2K" << std::endl;
     // if at the beginning of the analysis window an eclipse is ongoing skip ahead till it has ended
@@ -245,7 +247,7 @@ int main() {
             // a solar eclipse is detected and we're currently not in analysis mode
             analysis_active = true; // start analysis mode
 
-            std::cout << "Solar eclipse analysis triggered at " << j2000_to_utc_datetime(t) << ".\n"
+            std::cout << "\r\033[2K" << "Solar eclipse analysis triggered at " << j2000_to_utc_datetime(t) << ".\n"
                       << "Refining last step to narrow down start time." << std::endl;
             while(eclipsed(sun, moon, earth)) {
                 solver.MakeStep(-dt2);
@@ -261,8 +263,8 @@ int main() {
             // no solar eclipse is detected and we're currently in analysis mode
             analysis_active = false; // else end analysis mode
 
-            std::cout << "Detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << "." << std::endl;
-            std::cout << "Detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
+            std::cout << "\r\033[2K" << "Detected solar eclipse maximum at time " << j2000_to_utc_datetime(t_max) << ".\n"
+                      << "Detected solar eclipse end at time " << j2000_to_utc_datetime(t) << "." << "\n" << std::endl;
 
             netcdf_file.close_file(); // close output file
             file_path = folder / ("solar_eclipse_of_" + j2000_to_utc_date(t_max) + ".nc");
@@ -292,7 +294,11 @@ int main() {
             // write data to the file
             netcdf_file.write_step(general_buffer, occult_buffer, classif_buffer);
         }
+
+        // progress indicator
+        if ((iteration_counter % progress_refresh_interval_analysis) == 0) {std::cout << "\r\033[2K" << "Currently at: " << j2000_to_utc_datetime(t) << std::flush;}
     }
+    std::cout << "\r\033[2K" << std::flush;
 
     std::cout << "Reached the end of the eclipse analysis window.\n"
               << "Done, did a total of " << iteration_counter << " iterations." << std::endl;

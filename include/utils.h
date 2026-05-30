@@ -554,6 +554,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
 
     // loop over the lonitudes and latitudes and compute the respective occultation rates
     // and the topology including angle of the moon relative to the sun
+    #pragma omp parallel for
     for (unsigned i = 0; i < grid_size; i++) {
         double lon = lon_grid[i];
         double lat = lat_grid[i];
@@ -803,6 +804,15 @@ public:
         double occult_add_offset = 0.0;
         nc_put_att_double(ncid_, occult_id_, "scale_factor", NC_DOUBLE, 1, &occult_scale_factor);
         nc_put_att_double(ncid_, occult_id_, "add_offset", NC_DOUBLE, 1, &occult_add_offset);
+
+        // enable chunking on steps axis
+        size_t chunk_sizes[2] = {1, grid_size};
+        nc_def_var_chunking(ncid_, classif_id_, NC_CHUNKED, chunk_sizes);
+        nc_def_var_chunking(ncid_, occult_id_, NC_CHUNKED, chunk_sizes);
+
+        // enable compression: shuffle=1, deflate=1, level=5
+        nc_def_var_deflate(ncid_, classif_id_, 1, 1, 5);
+        nc_def_var_deflate(ncid_, occult_id_, 1, 1, 5);
 
         // close file definition mode
         nc_enddef(ncid_);
