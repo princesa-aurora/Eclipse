@@ -222,11 +222,11 @@ int main() {
     std::cout << "\r\033[2K" << std::endl;
     // if at the beginning of the analysis window an eclipse is ongoing skip ahead till it has ended
     // since that eclipse would be only recorded incompletely so we may just throw it away entirely
-    if (eclipsed(sun, moon, earth)) {
+    if (eclipsed(earth, moon, sun)) {
         std::cout << "Note: at the beginning of the eclipse analysis window there is an ongoing eclipse."
                   << "As it can't be analyzed completely it is skipped entirely."
                   << "Did you maybe set the window slighly too late?" << std::endl;
-        while (eclipsed(sun, moon, earth)) {
+        while (eclipsed(earth, moon, sun)) {
             solver.MakeStep(dt1);
         }
     }
@@ -241,7 +241,7 @@ int main() {
         iteration_counter++;
         solver.MakeStep(analysis_active ? dt2 : dt1);
 
-        solar_eclipse = eclipsed(sun, moon, earth); // check for an eclipse
+        solar_eclipse = eclipsed(earth, moon, sun); // check for an eclipse
 
         if (solar_eclipse && !analysis_active) {
             // a solar eclipse is detected and we're currently not in analysis mode
@@ -249,7 +249,7 @@ int main() {
 
             std::cout << "\r\033[2K" << "Solar eclipse analysis triggered at " << j2000_to_utc_datetime(t) << ".\n"
                       << "Refining last step to narrow down start time." << std::endl;
-            while(eclipsed(sun, moon, earth)) {
+            while(eclipsed(earth, moon, sun)) {
                 solver.MakeStep(-dt2);
             }
             std::cout << "Detected solar eclipse start at time " << j2000_to_utc_datetime(t+dt2) << "." << std::endl;

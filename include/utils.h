@@ -330,33 +330,34 @@ private:
 
 
 
-bool eclipsed(const Body &body0, const Body &body1, const Body &body2) {
+bool eclipsed(const Body &earth, const Body &moon, const Body &sun) {
     // check if body 1 ecplipses between bodies 0 and 2
-    const double &R0 = body0.GetR();
-    const double &R1 = body1.GetR();
-    const double &R2 = body2.GetR();
-    const Vector &x0 = body0.Getx();
-    const Vector &x1 = body1.Getx();
-    const Vector &x2 = body2.Getx();
+    const double& R_earth = earth.GetR();
+    const double& R_moon = moon.GetR();
+    const double& R_sun = sun.GetR();
 
-    Vector e_parallel = (x2-x0)/(x2-x0).norm();
+    const Vector& x_earth_ICRF = earth.Getx();
+    const Vector& x_moon_ICRF = moon.Getx();
+    const Vector& x_sun_ICRF = sun.Getx();
 
-    double d01 = (x1-x0).dot(e_parallel);
+    // shift ICRF origin to earth
+    // x_earth = 0;
+    Vector x_moon = x_moon_ICRF - x_earth_ICRF;
+    Vector x_sun = x_sun_ICRF - x_earth_ICRF;
 
-    if (d01 < 0 || d01 > (x2-x0).norm()) {
-        return false;
-    }
+    double d_sun = x_sun.norm();
+    Vector e_parallel = x_sun/d_sun;
+    double d_moon_parallel = x_moon.dot(e_parallel);
+    double d_moon_orthogonal = sqrt(x_moon.dot(x_moon) - d_moon_parallel*d_moon_parallel);
 
-    double D = (x1-x0 - d01*e_parallel).norm();
-    double r_lightcone_1 = R0 + (R2-R0)*d01/(x2-x0).norm();
+    double z0 = R_earth*d_sun/(R_earth - R_sun);
+    double A = R_earth/sqrt(z0*z0 - R_earth*R_earth);
 
-    if (D < r_lightcone_1 + R1) {
-        return true;
-    }
-    else {
-        return false;
-    }
+    double D_lightcone_moon_min = abs(d_moon_orthogonal - A*(d_moon_parallel - z0)) /sqrt(A*A+1);
+
+    return D_lightcone_moon_min <= R_moon;
 }
+
 
 
 std::pair<std::string, std::string> jdtt_to_utc_date_and_time(double jdtt) {
