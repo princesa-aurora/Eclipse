@@ -7,6 +7,7 @@
 #include <map>
 #include <cstdint>
 #include <sstream>
+#include <algorithm>
 
 #include <erfa.h>
 #include <Eigen/Dense>
@@ -528,6 +529,53 @@ double disks_intersection_area(double R1, double R2, double d) {
 }
 
 
+
+double cap_solid_angle(double theta) {
+    // return the solid angle covered by a spherical cap of angular radius theta
+    return 2*M_PI *(1.0-cos(theta));
+}
+
+
+double caps_intersection_solid_angle(double theta1, double theta2, double angle_sep) {
+    // what is the intersection solid angle of two spherical caps (one with angular radius theta1 and the other with theta2)
+    // whose centers are separated by an angular separation angle_sep?
+
+    if (angle_sep > theta1 + theta2) { // separation is too large: no intersection at all
+        return 0.0;
+    }
+    else if (angle_sep < abs(theta1 - theta2)) { // separation is small enough for total overlap
+        return std::min(cap_solid_angle(theta1), cap_solid_angle(theta2));
+    }
+
+    // semi-angles of the sectors (phi1 and phi2)
+    double cos_phi1 = (cos(theta2) - cos(angle_sep) * cos(theta1)) / (sin(angle_sep) * sin(theta1));
+    double cos_phi2 = (cos(theta1) - cos(angle_sep) * cos(theta2)) / (sin(angle_sep) * sin(theta2));
+    double phi1 = acos_continued(cos_phi1);
+    double phi2 = acos_continued(cos_phi2);
+
+    // spherical Excess using L'Huilier's formula
+    double s = (theta1 + theta2 + angle_sep)/2; // Semi-perimeter
+    double tan_s2     = tan(s / 2);
+    double tan_s_th1  = tan((s - theta1)/2);
+    double tan_s_th2  = tan((s - theta2)/2);
+    double tan_s_d    = tan((s - angle_sep)/2);
+    double tan_E_div_4 = sqrt(tan_s2 * tan_s_th1 * tan_s_th2 * tan_s_d);
+    double E = 4*atan(tan_E_div_4);
+
+    // put everything together
+    double area1 = 2*phi1 * (1.0 - cos(theta1));
+    double area2 = 2*phi2 * (1.0 - cos(theta2));
+    double intersection_solid_angle = area1 + area2 - 2*E;
+
+    if (intersection_solid_angle < 0) {
+        return 0.0; // if due to numerical precision errors the result is slightly negative return 0
+    }
+
+    return intersection_solid_angle;
+}
+
+
+
 template<size_t grid_size>
 void compute_local_occultations(const Body &earth, const Body &moon,  const Body &sun,
                                 const heap_array<double, grid_size> &lon_grid, const heap_array<double, grid_size> &lat_grid,
@@ -546,8 +594,6 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
 
     const Matrix RotMat_inv_earth = earth.GetRotMat().transpose();
 
-    double A_sun = M_PI*R_sun*R_sun;
-
     // transform from ICRF to terrestrial frame
     // x_earth = 0;
     x_moon = RotMat_inv_earth *(x_moon - x_earth_ICRF);
@@ -565,48 +611,47 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
 
         Vector x_s = x_sun - x; // vector from observation point to the sun
         Vector x_m = x_moon - x; // vector from observation point to the moon
+        double d_s = x_s.norm(); // distance from observation point to the sun
+        double d_m = x_m.norm(); // distance from observation point to the moon
+        Vector e_s = x_s/d_s; // unit vector pointing to the sun
+        Vector e_m = x_m/d_m; // unit vector pointing to the moon
         double rho_s = sqrt(x_s(0)*x_s(0) + x_s(1)*x_s(1)); // cylindrical radius of x_s
-        double r_s = x_s.norm(); // distance from observation point to the sun
+        Vector e_southnorth = Vector(0.0, 0.0, d_s/rho_s) - x_s(2)/rho_s *e_s; // unit vector pointing north to south
+        Vector e_eastwest(x_s(1)/rho_s, -x_s(0)/rho_s, 0.0); // unit vector pointing east to west
 
-        Vector e_parallel = x_s/r_s; // unit vector pointing to the sun
-        Vector e_orthogonal_southnorth = Vector(0.0, 0.0, r_s/rho_s) - x_s(2)/rho_s *e_parallel; // unit vector pointing north to south
-        Vector e_orthogonal_eastwest(x_s(1)/rho_s, -x_s(0)/rho_s, 0.0); // unit vector pointing east to west
+        double theta_moon = asin(R_moon/d_m); // angular radius of the moon as seen from observation point
+        double theta_sun = asin(R_sun/d_s); // angular radius of the sun as seen from observation point
 
-        double d_moon_parallel = e_parallel.dot(x_m);
-        double d_moon_orthogonal_southnorth = e_orthogonal_southnorth.dot(x_m);
-        double d_moon_orthogonal_eastwest = e_orthogonal_eastwest.dot(x_m);
-
-        double d_moon_orthogonal = sqrt(d_moon_orthogonal_southnorth*d_moon_orthogonal_southnorth
-                                        + d_moon_orthogonal_eastwest*d_moon_orthogonal_eastwest);
-
-        // scale moons radius and orthogonal distance to as if it was as far away as the sun
-        double R_moon_scaled = R_moon *r_s/d_moon_parallel;
-        double d_moon_scaled = d_moon_orthogonal *r_s/d_moon_parallel;
+        double angle_sep = acos(e_s.dot(e_m)); // angular separation between the moon and the sun
 
         // compute intersection area of sun and scaled moon (both simplified to disks) and divide by sun area to get occultations
-        occult_buffer[i] = disks_intersection_area(R_sun, R_moon_scaled, d_moon_scaled) /A_sun;
+        occult_buffer[i] = caps_intersection_solid_angle(theta_moon, theta_sun, angle_sep) /cap_solid_angle(theta_sun);
 
         // classify the eclipse topology: no eclipse(0), partial(1), annular(2), total(3)
         uint8_t topology;
-        if (d_moon_scaled > R_sun + R_moon_scaled) {
+        if (angle_sep > theta_sun + theta_moon) {
             topology = 0; // no eclipse
         }
-        else if (d_moon_scaled > abs(R_sun - R_moon_scaled)) {
+        else if (angle_sep > abs(theta_sun - theta_moon)) {
             topology = 1; // partiaĺ eclipse
         }
-        else if (R_sun > R_moon_scaled) {
+        else if (theta_sun > theta_moon) {
             topology = 2; // annular eclipse
         }
-        else { // R_moon_scaled > R_sun
+        else { // theta_moon > theta_sun
             topology = 3; // total eclipse
         }
 
-        // sort the clockwise angle of the moon relative to the sun (0° being north) into 6° bins
-        double angle = atan3(d_moon_orthogonal_eastwest, d_moon_orthogonal_southnorth);
-        uint8_t angle_binned = floor(angle*30.0/M_PI);
+        // calculate the clockwise angle of the moon relative to the sun (0° being north)
+        // and sort it into 6° bins
+        double d_moon_southnorth = e_southnorth.dot(x_m - x_s);
+        double d_moon_eastwest = e_eastwest.dot(x_m - x_s);
+
+        double moon_angle = atan3(d_moon_eastwest, d_moon_southnorth);
+        uint8_t moon_angle_binned = floor(moon_angle*30.0/M_PI);
 
         // combine topology and angle into a combined classification
-        classif_buffer[i] = 4*angle_binned + topology;
+        classif_buffer[i] = 4*moon_angle_binned + topology;
     }
 }
 
