@@ -15,7 +15,7 @@ times = dataset["time"].values
 sun_lon = dataset["lon_sun"].values
 sun_lat = dataset["lat_sun"].values
 num_steps = times.shape[0]
-dt = (times[-1]-times[0])/num_steps
+dt = (times[-1]-times[0])/(num_steps-1)
 
 lon_grid = dataset["lon_grid"].values
 lat_grid = dataset["lat_grid"].values
