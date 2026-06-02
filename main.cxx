@@ -19,17 +19,17 @@ const double t0 = 0.0; // seconds since J2000.0 epoch
 const BodyArray<N> initial_bodies(heap_array{{Sun, Earth, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune}});
 
 // start and end dates of the eclipse analysis season
-const std::string start_date = "03.02.2000";
-const std::string end_date = "07.02.2000";
+const std::string start_date = "09.08.2026";
+const std::string end_date = "15.08.2026";
 const double T_start = utc_date_and_time_to_j2000(start_date, "00-00-00");
 const double T_end = utc_date_and_time_to_j2000(end_date, "00-00-00");
 
 // step sizes: dt1 default, dt2 during eclipse analysis
-const double dt1 = 60.0;
-const double dt2 = 30.0;
+const double dt1 = 10.0;
+const double dt2 = 1.0;
 
 // number of points in Fibonacci sphere for eclipse analysis
-const size_t grid_size = 1e5;
+const size_t grid_size = 5e6;
 
 // refresh intervals for progress indicators
 size_t progress_refresh_interval_catchup = 3000;

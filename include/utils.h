@@ -354,9 +354,9 @@ bool eclipsed(const Body &earth, const Body &moon, const Body &sun) {
     double z0 = R_earth*d_sun/(R_earth - R_sun);
     double A = R_earth/sqrt(z0*z0 - R_earth*R_earth);
 
-    double D_lightcone_moon_min = abs(d_moon_orthogonal - A*(d_moon_parallel - z0)) /sqrt(A*A+1);
+    double d_moon_orthogonal_boundary = sqrt(A*A+1)*R_moon + A*(d_moon_parallel - z0);
 
-    return D_lightcone_moon_min <= R_moon;
+    return d_moon_orthogonal < d_moon_orthogonal_boundary;
 }
 
 
