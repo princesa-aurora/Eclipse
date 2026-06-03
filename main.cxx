@@ -208,7 +208,7 @@ int main() {
     heap_array<double, grid_size> occult_buffer;
     heap_array<u_int8_t, grid_size> classif_buffer;
 
-    std::cout << "Catching up to eclipse anaylsis window which starts at " << start_date << " 00-00-00 UTC." << std::endl;
+    std::cout << "Catching up to eclipse analysis window which starts at " << start_date << " 00-00-00 UTC." << std::endl;
     // do catching-up integration
     while (t <= T_start - dt1) {
         // keep going until just before the analysis window opens

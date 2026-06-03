@@ -356,7 +356,7 @@ bool eclipsed(const Body &earth, const Body &moon, const Body &sun) {
 
     double d_moon_orthogonal_boundary = sqrt(A*A+1)*R_moon + A*(d_moon_parallel - z0);
 
-    return d_moon_orthogonal < d_moon_orthogonal_boundary;
+    return d_moon_orthogonal <= d_moon_orthogonal_boundary;
 }
 
 
@@ -638,7 +638,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
         else if (theta_sun > theta_moon) {
             topology = 2; // annular eclipse
         }
-        else { // theta_moon > theta_sun
+        else { // theta_moon >= theta_sun
             topology = 3; // total eclipse
         }
 

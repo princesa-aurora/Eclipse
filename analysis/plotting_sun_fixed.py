@@ -15,13 +15,14 @@ import subprocess
 from utils import *
 
 
-file_path = "/data/eclipse_data/01.06.2026_19-22-00/solar_eclipse_of_05.02.2000.nc"
+file_path = "/data/eclipse_data/02.06.2026_12-16-26/solar_eclipse_of_12.08.2026.nc"
 
 num_procs = 4 #mp.cpu_count()
 
 anim_dir = os.path.join("/home/aurora/eclipse_data", file_path.split('/')[-2])
 anim_path = os.path.join(anim_dir, file_path.split('/')[-1][:-3] + "_sun_fixed.mp4")
 frame_dir = os.path.join(os.path.split(file_path)[0], "frames_sun_fixed")
+playlist_path = os.path.join(frame_dir, "playlist.txt")
 
 
 dask.config.set(scheduler='single-threaded')
@@ -149,8 +150,9 @@ def render_frames(proc_params):
     for i in range(start_idx, stop_idx):
         frame_path = os.path.join(frame_dir, f"frame_{i}.png")
         if os.path.exists(frame_path):
-            progress_bar.update(1)
-            continue # if the frame exists already there's no need to render it again
+            if is_valid_png(frame_path):
+                progress_bar.update(1)
+                continue # if the frame exists already (and is not corrupted) there's no need to render it again
 
         # clear the frame
         fig.clear()
@@ -184,15 +186,23 @@ if __name__ == "__main__":
 
     print("All frames successfully rendered. Starting FFmpeg video compilation...")
 
+    # create a .txt file that chornologically lists all frames that ffmpeg should stitch together
+    spf = dt/120 # seconds per frame
+    with open(playlist_path, "w") as file:
+        for i in range(num_steps):
+            file.write(f"file 'frame_{i}.png'\n")
+            file.write(f"duration {spf:.9f}\n")
+        file.write(f"file 'frame_{num_steps-1}.png'\n")
+
     # stitch the pngs together using ffmpeg in a separate terminal command
     ffmpeg_cmd = [
-        "ffmpeg", "-y",                    # overwrite output file if it exists
-        "-framerate", str(120/dt),         # framerate [fps] (sped up by 120 times compared to reality)
-        "-i", f"{frame_dir}/frame_%d.png", # input directory
-        "-c:v", "libx264",                 # industry standard h.264 video codec
-        "-pix_fmt", "yuv420p",             # colorspace compatible with all video players
-        "-crf", "18",                      # high quality, low compression factor
-        anim_path                          # file path for the animation 
+        "ffmpeg", "-y",            # overwrite output file if it exists
+        "-f", "concat",            # use the concat demuxer
+        "-i", playlist_path,       # path to the playlist
+        "-c:v", "libx264",         # industry standard h.264 video codec
+        "-pix_fmt", "yuv420p",     # colorspace compatible with all video players
+        "-crf", "18",              # high quality, low compression factor
+        anim_path                  # file path for the animation 
     ]
     subprocess.run(ffmpeg_cmd, check=True)
 

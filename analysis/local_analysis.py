@@ -6,10 +6,10 @@ from tqdm import tqdm
 from utils import *
 
 
-file_path = "/data/eclipse_data/28.05.2026_18-36-25/solar_eclipse_of_05.02.2000.nc"
+file_path = "/data/eclipse_data/02.06.2026_12-16-26/solar_eclipse_of_12.08.2026.nc"
 
-lon_observ_deg = 0
-lat_observ_deg = -90
+lon_observ_deg = 333.9017246019843
+lat_observ_deg = 69.39737253007465
 
 
 dataset = xr.open_dataset(file_path, chunks={"steps": 1, "grid": -1})
@@ -58,7 +58,7 @@ fig, ax = plt.subplots(dpi=200)
 ax.set_xlabel(f"time[minutes after {j2000_to_utc_datetime(times[0])}]")
 ax.set_ylabel("occultation[%]", color='navy')
 ax.tick_params(axis='y', labelcolor='navy')
-ax.set_title(f"location: lon({lon_observ_deg}°), lat({lat_observ_deg}°) ({location_name})")
+ax.set_title(f"location: lon({lon_observ_deg}°), lat({lat_observ_deg}°)\n({location_name})")
 ax.set_xlim(0, minutes_after_start[-1])
 ax.set_ylim(y_min, y_max)
 

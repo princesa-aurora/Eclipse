@@ -6,7 +6,7 @@ from tqdm import tqdm
 from utils import *
 
 
-file_path = "/data/eclipse_data/28.05.2026_18-36-25/solar_eclipse_of_05.02.2000.nc"
+file_path = "/data/eclipse_data/02.06.2026_12-16-26/solar_eclipse_of_12.08.2026.nc"
 
 
 dataset = xr.open_dataset(file_path, chunks={"steps": 1, "grid": -1})
@@ -58,7 +58,7 @@ for i in tqdm(range(num_steps), desc="Processing steps"):
     annularity_end_idcs[annularity_mask] = i
 
     # totality
-    totality_mask = (topology_chunk == 2)
+    totality_mask = (topology_chunk == 3)
     totality_mask = np.logical_and(totality_mask, day_mask)
     totality_start_idcs[totality_end_idcs==num_steps] = i
     totality_end_idcs[totality_mask] = i

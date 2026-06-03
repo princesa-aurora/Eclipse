@@ -5,6 +5,7 @@ from scipy.spatial import KDTree
 from global_land_mask import globe
 import reverse_geocoder as rg
 import pycountry
+from PIL import Image
 
 
 
@@ -175,6 +176,16 @@ def mean_of_lons_and_lats(lons, lats):
 
     return lon_mean, lat_mean
 
+
+
+def is_valid_png(file_path):
+    # is the file a valid png?
+    try:
+        with Image.open(file_path) as img:
+            img.verify() # PIL does all the work of checking the file
+        return True
+    except (FileNotFoundError, IOError, SyntaxError):
+        return False
 
 
 
