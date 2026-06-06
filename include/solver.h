@@ -16,17 +16,15 @@ class Forest_Ruth {
 public:
     // constructor
     Forest_Ruth(
-        std::function<VectorArray<N>(const BodyArray<N>&)> x_dot,
-        std::function<VectorArray<N>(const BodyArray<N>&)> p_dot,
-        std::function<VectorArray<N>(const BodyArray<N>&)> orient_dot,
-        std::function<VectorArray<N>(const BodyArray<N>&)> L_dot,
+        std::function<void(double, BodyArray<N>&)> H_kin_update,
+        std::function<void(double, BodyArray<N>&)> H_pot_update,
+        std::function<void(double, BodyArray<N>&)> H_pert_update,
         BodyArray<N> initial,
         double t0)
         :
-        x_dot_(x_dot),
-        p_dot_(p_dot),
-        orient_dot_(orient_dot),
-        L_dot_(L_dot),
+        H_kin_update_(H_kin_update),
+        H_pot_update_(H_pot_update),
+        H_pert_update_(H_pert_update),
         bodies_(initial),
         t_(t0)
     {}
@@ -53,14 +51,12 @@ public:
 
 
 private:
-    // function that gives x_dot(x, p)
-    std::function<VectorArray<N>(const BodyArray<N>&)> x_dot_;
-    // function that gives p_dot(x, p)
-    std::function<VectorArray<N>(const BodyArray<N>&)> p_dot_;
-    // function that gives orient_dot(x, p)
-    std::function<VectorArray<N>(const BodyArray<N>&)> orient_dot_;
-    // function that gives L_dot(x, p)
-    std::function<VectorArray<N>(const BodyArray<N>&)> L_dot_;
+    // function that updates the phase space states according to the kinetic Hamiltonian
+    const std::function<void(double, BodyArray<N>&)> H_kin_update_;
+    // function that updates the phase space states according to the potential Hamiltonian
+    const std::function<void(double, BodyArray<N>&)> H_pot_update_;
+    // function that updates the phase space states according to the perturbation Hamiltonian
+    const std::function<void(double, BodyArray<N>&)> H_pert_update_;
 
     // current time
     double t_;
@@ -74,17 +70,20 @@ private:
     // compute a step of the Leapfrog algorithm
     void ComputeLeapFrogStep(double dt, BodyArray<N> &bodies) {
 
-        // step 1: update momenta by half a step
-        bodies.Incrementp(dt/2 * p_dot_(bodies));
-        bodies.IncrementL(dt/2 * L_dot_(bodies));
+        // step 1: update using H_pot by half a step
+        H_pot_update_(dt/2, bodies);
 
-        // step 2: update positions by a full step
-        bodies.Incrementx(dt * x_dot_(bodies));
-        bodies.Incrementorient(dt * orient_dot_(bodies));
+        // step 2: update using H_kin by half a step
+        H_kin_update_(dt/2, bodies);
 
-        // step 3: update momenta by another half a step
-        bodies.Incrementp(dt/2 * p_dot_(bodies));
-        bodies.IncrementL(dt/2 * L_dot_(bodies));
+        // step 3: update using H_pert by a full step
+        H_pert_update_(dt, bodies);
+
+        // step 4: update unsing H_kin by another half a step
+        H_kin_update_(dt/2, bodies);
+
+        // step 5: update using H_pot by another half a step
+        H_pot_update_(dt/2, bodies);
     }
 
     // compute a step of the Forest-Ruth algorithm

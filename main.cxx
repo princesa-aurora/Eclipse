@@ -9,6 +9,7 @@
 #include <include/utils.h>
 #include <include/initial_conditions.h>
 #include <include/solver.h>
+#include <include/physics.h>
 
 namespace fs = std::filesystem;
 
@@ -45,141 +46,56 @@ int main() {
     fs::create_directory(folder);
 
 
-    std::function<VectorArray<N>(const BodyArray<N>&)> x_dot = [&](const BodyArray<N> &bodies)
-    {
-        // position time derivative
-        VectorArray<N> v;
-        for (unsigned i = 0; i < N; i++) {
-            v.row(i) = bodies[i].Getv();
-        }
-        return v;
+    std::function<void(double, BodyArray<N>&)> H_kin_update = [&](double dt, BodyArray<N> &bodies)
+    { // do an update of the phase space states according to the kinetic part of the Hamiltonian
+      // this must only depend on the momenta
+      VectorArray<N> x_dot = dH_kin_dp(bodies);
+      VectorArray<N> orient_dot = dH_kin_dL(bodies);
+
+      bodies.Incrementx(x_dot*dt);
+      bodies.Incrementorient(orient_dot*dt);
     };
 
-    std::function<VectorArray<N>(const BodyArray<N>&)> p_dot = [&](const BodyArray<N> &bodies)
-    {
-        // momentum time derivative
+    std::function<void(double, BodyArray<N>&)> H_pot_update = [&](double dt, BodyArray<N> &bodies)
+    { // do an update of the phase space states according to the potential part of the Hamiltonian
+      // this must only depend on the coordinated
+        VectorArray<N> p_dot = -dH_pot_dx(bodies);
+        VectorArray<N> L_dot = -dH_pot_dorient(bodies);
 
-        //std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
-
-        VectorArray<N> F = VectorArray<N>::Zero();
-        Vector f;
-        Vector r_vec;
-        double r;
-        Vector e_r;
-        double r2_inv;
-        double ewxer;
-        double ewyer;
-
-        for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies[i].Getx();
-            const double& Mx = bodies[i].GetM();
-            const double& Rx = bodies[i].GetR();
-            const double& J2x = bodies[i].GetJ2();
-            const Vector ewx = bodies[i].GetAxis();
-
-            for (unsigned j = 0; j < i; j++) {
-                const Vector& y = bodies[j].Getx();
-                const double& My = bodies[j].GetM();
-                const double& Ry = bodies[j].GetR();
-                const double& J2y = bodies[j].GetJ2();
-                const Vector ewy = bodies[j].GetAxis();
-
-                r_vec = y - x;
-                r = r_vec.norm();
-                e_r = r_vec /r;
-                r2_inv = 1/(r*r);
-                ewxer = ewx.dot(e_r);
-                ewyer = ewy.dot(e_r);
-
-                f = PHYS_G*Mx*My*r2_inv *(e_r
-                    +3*J2x*(Rx*Rx*r2_inv)*((2.5*ewxer*ewxer - 0.5)*e_r - ewxer*ewx)
-                    +3*J2y*(Ry*Ry*r2_inv)*((2.5*ewyer*ewyer - 0.5)*e_r - ewyer*ewy));
-
-                F.row(i) += f;
-                F.row(j) -= f;
-            }
-        }
-
-        //std::chrono::_V2::system_clock::time_point stop = std::chrono::high_resolution_clock::now();
-        //std::cout << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << std::endl;
-
-        return F;
+        bodies.Incrementp(p_dot*dt);
+        bodies.IncrementL(L_dot*dt);
     };
 
+    std::function<void(double, BodyArray<N>&)> H_pert_update = [&](double dt, BodyArray<N> &bodies)
+    { // do an update of the phase space states according to the perturbation part of the Hamiltonian
+      // this can depend on both coordinated and momenta but must be small (i.e. a perturbation)
+        VectorArray<N> x0 = bodies.Getx();
+        VectorArray<N> p0 = bodies.Getp();
+        //std::cout << " 0 : " << std::setprecision(std::numeric_limits<double>::max_digits10)
+        //    << x0.row(1).transpose() << " , " << p0.row(1).transpose() << std::endl;
+        VectorArray<N> x_iter = x0;
+        VectorArray<N> p_iter = p0;
+        for (unsigned i = 0; i < 2; i++) {
+            VectorArray<N> x_dot = dH_pert_dp(bodies);
+            VectorArray<N> p_dot = -dH_pert_dx(bodies);
 
-    std::function<VectorArray<N>(const BodyArray<N>&)> orient_dot = [&](const BodyArray<N> &bodies)
-    {
-        // rotation angle time derivative
-        VectorArray<N> w;
-        for (unsigned i = 0; i < N; i++) {
-            w.row(i) = bodies[i].Getw();
-        }
-        return w;
-    };
+            x_iter = x0 + dt*x_dot;
+            p_iter = p0 + dt*p_dot;
 
-    std::function<VectorArray<N>(const BodyArray<N>&)> L_dot = [&](const BodyArray<N> &bodies)
-    {
-        // angular momentum time derivative
+            bodies.Setx((x_iter+x0)/2);
+            bodies.Setp((p_iter+p0)/2);
 
-        //std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
-
-        VectorArray<N> Torque = VectorArray<N>::Zero();
-        Vector torque;
-        Vector r_vec;
-        double r;
-        Vector e_r;
-        double r3_inv;
-        double ewer;
-
-        for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies[i].Getx();
-            const double& alpha = bodies[i].Getorient()(1);
-            const double& delta = bodies[i].Getorient()(2);
-            const Vector& L = bodies[i].GetL();
-            const double& Mx = bodies[i].GetM();
-            const double& Ixy = bodies[i].GetIxy();
-            const double& Iz = bodies[i].GetIz();
-            const double& R = bodies[i].GetR();
-            const double& J2 = bodies[i].GetJ2();
-            const Vector ew = bodies[i].GetAxis();
-
-            const Vector ealpha(-sin(alpha), cos(alpha), 0.0);
-            const Vector edelta(-sin(delta)*cos(alpha), -sin(delta)*sin(alpha), cos(delta));
-
-            Matrix I_inv_prime;
-            I_inv_prime << -2.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 0.0,
-                           -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0,
-                            0.0, 0.0, 0.0;
-
-            for (unsigned j = 0; j < N; j++) {
-                if (j == i) {continue;}
-                const Vector& y = bodies[j].Getx();
-                const double& My = bodies[j].GetM();
-
-                r_vec = y - x;
-                r = r_vec.norm();
-                e_r = r_vec /r;
-                r3_inv = 1/(r*r*r);
-                ewer = ew.dot(e_r);
-
-                torque(0) = 0.0;
-                torque(1) = 3*PHYS_G*Mx*My*r3_inv*R*R*J2*ewer*(ealpha.dot(e_r))*cos(delta);
-                torque(2) = -1.0/2*(I_inv_prime *L).dot(L)
-                            + 3*PHYS_G*Mx*My*r3_inv*R*R*J2*ewer*(edelta.dot(e_r));
-
-                Torque.row(i) += torque;
-            }
+            //std::cout << i << " : " << std::setprecision(std::numeric_limits<double>::max_digits10)
+            //<< x_iter.row(1).transpose() << " , " << p_iter.row(1).transpose() << std::endl;
         }
 
-        //std::chrono::_V2::system_clock::time_point stop = std::chrono::high_resolution_clock::now();
-        //std::cout << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << std::endl;
-
-        return Torque;
+      bodies.Setx(x_iter);
+      bodies.Setp(p_iter);
     };
 
 
     // initialize solver
-    Forest_Ruth<N> solver(x_dot, p_dot, orient_dot, L_dot, initial_bodies, t0);
+    Forest_Ruth<N> solver(H_kin_update, H_pot_update, H_pert_update, initial_bodies, t0);
 
     const double &t = solver.GetCurrentTime();
     const Body &sun = solver.GetCurrentBody(0);

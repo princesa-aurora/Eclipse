@@ -18,6 +18,7 @@
 
 
 double PHYS_G = 6.6743015E+04; // km3/(1e24 kg)/s^2, Newtons constant of gravity
+double PHYS_c = 299792.458; // km/s, speed of light
 
 
 using Vector = Eigen::Vector3d;
@@ -66,15 +67,18 @@ class Body {
 public:
 
     Body(
+        std::string name,
+
         double M,
         double a,
         double b,
         double i_f,
-    
+
         Vector x0,
         Vector p0,
         Vector orient0,
         Vector L0) :
+    name_(name),
     M_(M),
     a_(a),
     b_(b),
@@ -82,13 +86,17 @@ public:
     i_f_(i_f),
     Iz_(i_f*M*a*a),
     Ixy_(i_f/2.0*M*(a*a+b*b)),
-    J2_(i_f/2.0*(a*a - b*b)/(R_*R_)),
+    J2_(i_f/2.0*(1.0 - (b*b)/(a*a))),
 
     x_(x0),
     p_(p0),
     orient_(orient0),
     L_(L0)
     {}
+
+    std::string Getname() const {
+        return name_;
+    }
 
     double GetM() const {
         return M_;
@@ -224,6 +232,9 @@ public:
 
 
 private:
+    // name of the body
+    const std::string name_;
+
     // properties of the body
     const double M_; // mass
     const double a_; // equatorial radius
@@ -273,6 +284,39 @@ public:
 
     const Body& operator[](unsigned idx) const {
         return body_arr_[idx];
+    }
+
+
+    VectorArray<N> Getx() const {
+        VectorArray<N> x_arr;
+        for (unsigned i = 0; i < N; i++) {
+            x_arr.row(i) = body_arr_[i].Getx();
+        }
+        return x_arr;
+    }
+
+    VectorArray<N> Getp() const {
+        VectorArray<N> p_arr;
+        for (unsigned i = 0; i < N; i++) {
+            p_arr.row(i) = body_arr_[i].Getp();
+        }
+        return p_arr;
+    }
+
+    VectorArray<N> Getorient() const {
+        VectorArray<N> orient_arr;
+        for (unsigned i = 0; i < N; i++) {
+            orient_arr.row(i) = body_arr_[i].Getorient();
+        }
+        return orient_arr;
+    }
+
+    VectorArray<N> GetL() const {
+        VectorArray<N> L_arr;
+        for (unsigned i = 0; i < N; i++) {
+            L_arr.row(i) = body_arr_[i].GetL();
+        }
+        return L_arr;
     }
 
 
@@ -599,7 +643,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
     x_moon = RotMat_inv_earth *(x_moon - x_earth_ICRF);
     x_sun = RotMat_inv_earth *(x_sun - x_earth_ICRF);
 
-    // loop over the lonitudes and latitudes and compute the respective occultation rates
+    // loop over the longitudes and latitudes and compute the respective occultation rates
     // and the topology including angle of the moon relative to the sun
     #pragma omp parallel for
     for (unsigned i = 0; i < grid_size; i++) {
@@ -624,7 +668,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
 
         double angle_sep = acos(e_s.dot(e_m)); // angular separation between the moon and the sun
 
-        // compute intersection area of sun and scaled moon (both simplified to disks) and divide by sun area to get occultations
+        // compute intersection solid angle of sun and moon and divide by the sun's solid angle to get occultations
         occult_buffer[i] = caps_intersection_solid_angle(theta_moon, theta_sun, angle_sep) /cap_solid_angle(theta_sun);
 
         // classify the eclipse topology: no eclipse(0), partial(1), annular(2), total(3)
