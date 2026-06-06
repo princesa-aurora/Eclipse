@@ -47,18 +47,18 @@ int main() {
 
 
     std::function<void(double, BodyArray<N>&)> H_kin_update = [&](double dt, BodyArray<N> &bodies)
-    { // do an update of the phase space states according to the kinetic part of the Hamiltonian
-      // this must only depend on the momenta
-      VectorArray<N> x_dot = dH_kin_dp(bodies);
-      VectorArray<N> orient_dot = dH_kin_dL(bodies);
+    {   // do an update of the phase space states according to the kinetic part of the Hamiltonian
+        // this must only depend on the momenta
+        VectorArray<N> x_dot = dH_kin_dp(bodies);
+        VectorArray<N> orient_dot = dH_kin_dL(bodies);
 
-      bodies.Incrementx(x_dot*dt);
-      bodies.Incrementorient(orient_dot*dt);
+        bodies.Incrementx(x_dot*dt);
+        bodies.Incrementorient(orient_dot*dt);
     };
 
     std::function<void(double, BodyArray<N>&)> H_pot_update = [&](double dt, BodyArray<N> &bodies)
-    { // do an update of the phase space states according to the potential part of the Hamiltonian
-      // this must only depend on the coordinated
+    {   // do an update of the phase space states according to the potential part of the Hamiltonian
+        // this must only depend on the coordinated
         VectorArray<N> p_dot = -dH_pot_dx(bodies);
         VectorArray<N> L_dot = -dH_pot_dorient(bodies);
 
@@ -67,30 +67,28 @@ int main() {
     };
 
     std::function<void(double, BodyArray<N>&)> H_pert_update = [&](double dt, BodyArray<N> &bodies)
-    { // do an update of the phase space states according to the perturbation part of the Hamiltonian
-      // this can depend on both coordinated and momenta but must be small (i.e. a perturbation)
+    {   // do an update of the phase space states according to the perturbation part of the Hamiltonian
+        // this can depend on both coordinated and momenta but must be small (i.e. a perturbation)
         VectorArray<N> x0 = bodies.Getx();
         VectorArray<N> p0 = bodies.Getp();
-        //std::cout << " 0 : " << std::setprecision(std::numeric_limits<double>::max_digits10)
-        //    << x0.row(1).transpose() << " , " << p0.row(1).transpose() << std::endl;
-        VectorArray<N> x_iter = x0;
-        VectorArray<N> p_iter = p0;
+
+        // do a fixed point iteration for x_mid = (x+x0)/2 starting at x_mid = x0 (and equivalently for p)
+        VectorArray<N> x_mid = x0;
+        VectorArray<N> p_mid = p0;
+
         for (unsigned i = 0; i < 2; i++) {
+            bodies.Setx(x_mid);
+            bodies.Setp(p_mid);
+
             VectorArray<N> x_dot = dH_pert_dp(bodies);
             VectorArray<N> p_dot = -dH_pert_dx(bodies);
 
-            x_iter = x0 + dt*x_dot;
-            p_iter = p0 + dt*p_dot;
-
-            bodies.Setx((x_iter+x0)/2);
-            bodies.Setp((p_iter+p0)/2);
-
-            //std::cout << i << " : " << std::setprecision(std::numeric_limits<double>::max_digits10)
-            //<< x_iter.row(1).transpose() << " , " << p_iter.row(1).transpose() << std::endl;
+            x_mid = x0 + dt/2 *x_dot;
+            p_mid = p0 + dt/2 *p_dot;
         }
 
-      bodies.Setx(x_iter);
-      bodies.Setp(p_iter);
+        bodies.Setx(2*x_mid - x0);
+        bodies.Setp(2*p_mid - p0);
     };
 
 

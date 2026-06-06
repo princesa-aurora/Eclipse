@@ -60,7 +60,7 @@ Vector v0_mercury(3.700430442865286E+01, -8.541376791212787E+00, -8.398372410524
 double GM_mercury(22031.86855);
 double M_mercury = GM_mercury /PHYS_G;
 double R_mercury(2439.4);
-Vector p0_mercury = M_mercury * v0_mercury * (1 + v0_mercury.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_mercury = M_mercury * v0_mercury * (1 + v0_mercury.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_mercury-x0_sun).norm()));
 
 double alpha0_mercury(281.0103*M_PI/180.0);
 double delta0_mercury(61.4155*M_PI/180.0);
@@ -88,7 +88,7 @@ Vector v0_venus(1.391218600360602E+00, -3.202951993786435E+01, -1.44970867394447
 double GM_venus(324858.592);
 double M_venus = GM_venus /PHYS_G;
 double R_venus(6051.84);
-Vector p0_venus = M_venus * v0_venus * (1 + v0_venus.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_venus = M_venus * v0_venus * (1 + v0_venus.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_venus-x0_sun).norm()));
 
 double alpha0_venus(272.76*M_PI/180.0);
 double delta0_venus(67.16*M_PI/180.0);
@@ -116,7 +116,7 @@ Vector v0_earth(-2.978494749858966E+01, -5.029753814524049E+00, -2.1806450688608
 double GM_earth(398600.435436);
 double M_earth = GM_earth /PHYS_G;
 double R_earth(6371.01);
-Vector p0_earth = M_earth*v0_earth * (1 + v0_earth.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_earth = M_earth*v0_earth * (1 + v0_earth.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_earth-x0_sun).norm()));
 
 double alpha0_earth(0.0); // irrelevant since delta0_earth=90°
 double delta0_earth(90.0*M_PI/180.0); // by definition of ICRF
@@ -144,7 +144,7 @@ Vector v0_moon(-2.914141610973326E+01, -5.695841497599683E+00, -2.48197077355561
 double GM_moon(4902.800066);
 double M_moon = GM_moon /PHYS_G;
 double R_moon(1737.53);
-Vector p0_moon = M_moon * v0_moon * (1 + v0_moon.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_moon = M_moon * v0_moon * (1 + v0_moon.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_moon-x0_sun).norm()));
 
 double alpha0_moon(266.9326060656449*M_PI/180.0); // all moon data taken from the 2009 report
 double delta0_moon(65.64567138250604*M_PI/180.0);
@@ -172,7 +172,7 @@ Vector v0_mars(1.171984975915371E+00, 2.390670819298864E+01, 1.093392065055535E+
 double GM_mars(42828.375662);
 double M_mars = GM_mars /PHYS_G;
 double R_mars(3389.92);
-Vector p0_mars = M_mars * v0_mars * (1 + v0_mars.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_mars = M_mars * v0_mars * (1 + v0_mars.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_mars-x0_sun).norm()));
 
 double alpha0_mars(317.269202*M_PI/180.0);
 double delta0_mars(54.432516*M_PI/180.0);
@@ -200,7 +200,7 @@ Vector v0_jupiter(-7.900525116626677, 10.17179630924754, 4.552467787266711);
 double GM_jupiter(126712764.1);
 double M_jupiter = GM_jupiter /PHYS_G;
 double R_jupiter(69911.0);
-Vector p0_jupiter = M_jupiter * v0_jupiter * (1 + v0_jupiter.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_jupiter = M_jupiter * v0_jupiter * (1 + v0_jupiter.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_jupiter-x0_sun).norm()));
 
 double alpha0_jupiter(268.05677758224186*M_PI/180.0);
 double delta0_jupiter(64.49489190378664*M_PI/180.0);
@@ -228,7 +228,7 @@ Vector v0_saturn(-7.422709426010933, 6.097474815232451, 2.837682288256848);
 double GM_saturn(37940584.8418);
 double M_saturn = GM_saturn /PHYS_G;
 double R_saturn(58232.0);
-Vector p0_saturn = M_saturn * v0_saturn * (1 + v0_saturn.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_saturn = M_saturn * v0_saturn * (1 + v0_saturn.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_saturn-x0_sun).norm()));
 
 double alpha0_saturn(40.589*M_PI/180.0);
 double delta0_saturn(83.537*M_PI/180.0);
@@ -256,7 +256,7 @@ Vector v0_uranus(4.646336807878913, 4.251152675973469, 1.796172785810810);
 double GM_uranus(5794565.6);
 double M_uranus = GM_uranus /PHYS_G;
 double R_uranus(25362.0);
-Vector p0_uranus = M_uranus * v0_uranus * (1 + v0_uranus.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_uranus = M_uranus * v0_uranus * (1 + v0_uranus.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_uranus-x0_sun).norm()));
 
 double alpha0_uranus(257.311*M_PI/180.0);
 double delta0_uranus(-15.175*M_PI/180.0);
@@ -284,7 +284,7 @@ Vector v0_neptune(4.475214621751574, 2.877104855637495, 1.066200548145686);
 double GM_neptune(6836525.2);
 double M_neptune = GM_neptune /PHYS_G;
 double R_neptune(24624.0);
-Vector p0_neptune = M_neptune * v0_neptune * (1 + v0_neptune.squaredNorm()/(2*PHYS_c*PHYS_c));
+Vector p0_neptune = M_neptune * v0_neptune * (1 + v0_neptune.squaredNorm()/(2*PHYS_c*PHYS_c) + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x0_neptune-x0_sun).norm()));
 
 double alpha0_neptune(299.33373895877264*M_PI/180.0);
 double delta0_neptune(42.95035902184485*M_PI/180.0);
