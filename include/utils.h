@@ -340,11 +340,20 @@ bool eclipsed(const Body &earth, const Body &moon, const Body &sun) {
     const Vector& x_earth_ICRF = earth.Getx();
     const Vector& x_moon_ICRF = moon.Getx();
     const Vector& x_sun_ICRF = sun.Getx();
+    const Vector& v_moon = moon.Getv();
+    const Vector& v_sun = sun.Getv();
 
     // shift ICRF origin to earth
     // x_earth = 0;
     Vector x_moon = x_moon_ICRF - x_earth_ICRF;
     Vector x_sun = x_sun_ICRF - x_earth_ICRF;
+
+    // we need the retarded positions of the sun and moon (ie corrected for light travel time)
+    double PHYS_c = 299792.458; // remove before merge!!!!
+    double t_moon = -1.0/PHYS_c *x_moon.norm();
+    double t_sun = -1.0/PHYS_c *x_sun.norm();
+    x_moon += v_moon*t_moon;
+    x_sun += v_sun*t_sun;
 
     double d_sun = x_sun.norm();
     Vector e_parallel = x_sun/d_sun;
@@ -494,11 +503,28 @@ double compute_shadow_axis_distance_to_earth_center(const Body &earth, const Bod
     // the shadow's central axis is given be the line connecting sun and moon
     // return the shortest distance of this line to the earths center
 
-    Vector moon_to_earth = earth.Getx() - moon.Getx();
-    Vector sun_to_moon = moon.Getx() - sun.Getx();
-    sun_to_moon /= sun_to_moon.norm();
+    const Vector& x_earth_ICRF = earth.Getx();
+    const Vector& x_moon_ICRF = moon.Getx();
+    const Vector& x_sun_ICRF = sun.Getx();
+    const Vector& v_moon = moon.Getv();
+    const Vector& v_sun = sun.Getv();
 
-    double dist2 = moon_to_earth.dot(moon_to_earth) - (moon_to_earth.dot(sun_to_moon))*(moon_to_earth.dot(sun_to_moon));
+    // shift ICRF origin to earth
+    // x_earth = 0;
+    Vector x_moon = x_moon_ICRF - x_earth_ICRF;
+    Vector x_sun = x_sun_ICRF - x_earth_ICRF;
+
+    // we need the retarded positions of the sun and moon (ie corrected for light travel time)
+    double PHYS_c = 299792.458; // remove before merge!!!!
+    double t_moon = -1.0/PHYS_c *x_moon.norm();
+    double t_sun = -1.0/PHYS_c *x_sun.norm();
+    x_moon += v_moon*t_moon;
+    x_sun += v_sun*t_sun;
+
+    Vector moon_to_sun = x_sun - x_moon;
+    moon_to_sun /= moon_to_sun.norm();
+
+    double dist2 = x_moon.squaredNorm() - (moon_to_sun.dot(x_moon))*(moon_to_sun.dot(x_moon));
 
     return sqrt(dist2);
 }
@@ -589,15 +615,27 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
     const double& R_sun = sun.GetR();
 
     const Vector& x_earth_ICRF = earth.Getx();
-    Vector x_moon = moon.Getx();
-    Vector x_sun = sun.Getx();
-
+    const Vector& x_moon_ICRF = moon.Getx();
+    const Vector& x_sun_ICRF = sun.Getx();
+    const Vector& v_moon = moon.Getv();
+    const Vector& v_sun = sun.Getv();
     const Matrix RotMat_inv_earth = earth.GetRotMat().transpose();
 
-    // transform from ICRF to terrestrial frame
+    // shift ICRF origin to earth
     // x_earth = 0;
-    x_moon = RotMat_inv_earth *(x_moon - x_earth_ICRF);
-    x_sun = RotMat_inv_earth *(x_sun - x_earth_ICRF);
+    Vector x_moon = x_moon_ICRF - x_earth_ICRF;
+    Vector x_sun = x_sun_ICRF - x_earth_ICRF;
+
+    // rotate into terrestrial frame
+    x_moon = RotMat_inv_earth *x_moon;
+    x_sun = RotMat_inv_earth *x_sun;
+
+    // we need the retarded positions of the sun and moon (ie corrected for light travel time)
+    double PHYS_c = 299792.458; // remove before merge!!!!
+    double t_moon = -1.0/PHYS_c *x_moon.norm();
+    double t_sun = -1.0/PHYS_c *x_sun.norm();
+    x_moon += v_moon*t_moon;
+    x_sun += v_sun*t_sun;
 
     // loop over the lonitudes and latitudes and compute the respective occultation rates
     // and the topology including angle of the moon relative to the sun
