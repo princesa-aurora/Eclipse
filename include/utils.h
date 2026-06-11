@@ -610,7 +610,8 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
     // thereby ignore day and night, i.e. pretend that one can look through the earth and see the eclipse even though its night
     // (this is just so darkness due to eclipse and darkness due to night are not mixed up)
     // write the results into the provided buffers
-    const double& R_earth = earth.GetR();
+    const double& a_earth = earth.Geta();
+    const double& b_earth = earth.Getb();
     const double& R_moon = moon.GetR();
     const double& R_sun = sun.GetR();
 
@@ -645,7 +646,10 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
         double lat = lat_grid[i];
 
         // convert to position vector
-        Vector x = R_earth *Vector(cos(lat)*cos(lon), cos(lat)*sin(lon), sin(lat));
+        double a2 = a_earth*a_earth, b2 = b_earth*b_earth;
+        double cos_lat = cos(lat), sin_lat = sin(lat);
+        double Z = sqrt(a2*cos_lat*cos_lat + b2*sin_lat*sin_lat);
+        Vector x = Vector(a2*cos_lat*cos(lon), a2*cos_lat*sin(lon), b2*sin_lat) /Z;
 
         Vector x_s = x_sun - x; // vector from observation point to the sun
         Vector x_m = x_moon - x; // vector from observation point to the moon
