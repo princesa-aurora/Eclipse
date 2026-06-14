@@ -8,6 +8,90 @@
 
 
 template<unsigned N>
+VectorArray<N> p_of_v(const BodyArray<N> &bodies)
+{
+    // get the momenta from the velocities
+    VectorArray<N> p;
+    const double& M_sun = bodies[0].GetM();
+    const Vector x_sun = bodies[0].Getx();
+    for (unsigned i = 0; i < N; i++) {
+        const Vector& v = bodies[i].Getv();
+        const Vector& x = bodies[i].Getx();
+        const double& M = bodies[i].GetM();
+        p.row(i) = M*v * (1 + v.squaredNorm()/(2*PHYS_c*PHYS_c));
+        if (i != 0) {
+            p.row(i) *= (1 + 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x-x_sun).norm()));
+        }
+    }
+
+    return p;
+}
+
+
+template<unsigned N>
+VectorArray<N> v_of_p(const BodyArray<N> &bodies)
+{
+    // get the velocities from the momenta
+    VectorArray<N> v;
+    const double& M_sun = bodies[0].GetM();
+    const Vector x_sun = bodies[0].Getx();
+    for (unsigned i = 0; i < N; i++) {
+        const Vector& p = bodies[i].Getp();
+        const Vector& x = bodies[i].Getx();
+        const double& M = bodies[i].GetM();
+        v.row(i) = p/M * (1 - p.squaredNorm()/(2*PHYS_c*PHYS_c*M*M));
+        if (i != 0) {
+            v.row(i) *= (1 - 3*PHYS_G*M_sun/(PHYS_c*PHYS_c*(x-x_sun).norm()));
+        }
+    }
+
+    return v;
+}
+
+
+template<unsigned N>
+VectorArray<N> L_of_w(const BodyArray<N> &bodies)
+{
+    // get the angular momenta from the angular velocities
+    VectorArray<N> L;
+    for (unsigned i = 0; i < N; i++) {
+        const Vector& w = bodies[i].Getw();
+        const double& delta = bodies[i].Getorient()(2);
+        const double& Ixy = bodies[i].GetIxy();
+        const double& Iz = bodies[i].GetIz();
+        Matrix I;
+        I << Iz, -Iz*(1.0-sin(delta)), 0.0,
+             -Iz*(1.0-sin(delta)), Ixy*cos(delta)*cos(delta) + Iz*(1.0-sin(delta))*(1.0-sin(delta)), 0.0,
+             0.0, 0.0,Ixy;
+        L.row(i) = I *w;
+    }
+
+    return L;
+}
+
+
+template<unsigned N>
+VectorArray<N> w_of_L(const BodyArray<N> &bodies)
+{
+    // get the angular velocities from the angular momenta
+    VectorArray<N> w;
+    for (unsigned i = 0; i < N; i++) {
+        const Vector& L = bodies[i].GetL();
+        const double& delta = bodies[i].Getorient()(2);
+        const double& Ixy = bodies[i].GetIxy();
+        const double& Iz = bodies[i].GetIz();
+        Matrix I_inv;
+        I_inv << 1.0/Iz + 1.0/Ixy*cos(delta)*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 1.0/Ixy/(1.0+sin(delta)), 0.0,
+                 1.0/Ixy/(1.0+sin(delta)), 1.0/Ixy/cos(delta)/cos(delta), 0.0,
+                 0.0, 0.0, 1.0/Ixy;
+        w.row(i) = I_inv *L;
+    }
+
+    return w;
+}
+
+
+template<unsigned N>
 VectorArray<N> dH_kin_dp(const BodyArray<N> &bodies)
 {
     // derivative of the kinetic Hamiltonian wrt. momentum
@@ -42,8 +126,7 @@ VectorArray<N> dH_pot_dx(const BodyArray<N> &bodies)
         const double& J2x = bodies[i].GetJ2();
         const Vector ewx = bodies[i].GetAxis();
 
-        for (unsigned j = 0; j < N; j++) {
-            if (i == j) {continue;}
+        for (unsigned j = 0; j < i; j++) {
             const Vector& y = bodies[j].Getx();
             const double& My = bodies[j].GetM();
             const double& ay = bodies[j].Geta();
@@ -62,6 +145,7 @@ VectorArray<N> dH_pot_dx(const BodyArray<N> &bodies)
                 -3*J2y*(ay*ay*r2_inv)*((2.5*ewyer*ewyer - 0.5)*e_r - ewyer*ewy));
 
             NegF.row(i) += negf;
+            NegF.row(j) -= negf;
 
             if (j == 0) {
                 NegF.row(i) += -PHYS_G*PHYS_G*My*My*Mx/(PHYS_c*PHYS_c*r*r*r) *e_r;
@@ -77,11 +161,7 @@ template<unsigned N>
 VectorArray<N> dH_kin_dL(const BodyArray<N> &bodies)
 {
     // derivative of the kinetic Hamiltonian wrt. angular momentum
-    VectorArray<N> w;
-    for (unsigned i = 0; i < N; i++) {
-        w.row(i) = bodies[i].Getw();
-    }
-    return w;
+    return w_of_L(bodies);
 };
 
 

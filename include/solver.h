@@ -27,7 +27,13 @@ public:
         H_pert_update_(H_pert_update),
         bodies_(initial),
         t_(t0)
-    {}
+    {
+        // initialize p and L
+        VectorArray<N> p = p_of_v(bodies_);
+        VectorArray<N> L = L_of_w(bodies_);
+        bodies_.Setp(p);
+        bodies_.SetL(L);
+    }
 
     // destructor
     ~Forest_Ruth() = default;
@@ -47,6 +53,12 @@ public:
 
         t_ += dt;
         ComputeForestRuthStep(dt, bodies_);
+
+        // keep v and w up to date
+        VectorArray<N> v = v_of_p(bodies_);
+        VectorArray<N> w = w_of_L(bodies_);
+        bodies_.Setv(v);
+        bodies_.Setw(w);
     }
 
 

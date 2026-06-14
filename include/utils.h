@@ -73,11 +73,12 @@ public:
         double a,
         double b,
         double i_f,
+        double J2,
 
         Vector x0,
-        Vector p0,
+        Vector v0,
         Vector orient0,
-        Vector L0) :
+        Vector w0) :
     name_(name),
     M_(M),
     a_(a),
@@ -86,12 +87,14 @@ public:
     i_f_(i_f),
     Iz_(i_f*M*a*a),
     Ixy_(i_f/2.0*M*(a*a+b*b)),
-    J2_(i_f/2.0*(1.0 - (b*b)/(a*a))),
+    J2_(J2),
 
     x_(x0),
-    p_(p0),
+    p_(Vector::Constant(NAN)),
+    v_(v0),
     orient_(orient0),
-    L_(L0)
+    L_(Vector::Constant(NAN)),
+    w_(w0)
     {}
 
     std::string Getname() const {
@@ -148,19 +151,12 @@ public:
     }
 
 
-    Vector Getv() const {
-        return p_ /M_;
+    const Vector& Getv() const {
+        return v_;
     }
 
-    Vector Getw() const {
-        const double& delta = orient_(2);
-
-        Matrix I_inv;
-        I_inv << 1.0/Iz_ + 1.0/Ixy_*cos(delta)*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 1.0/Ixy_/(1.0+sin(delta)), 0.0,
-                 1.0/Ixy_/(1.0+sin(delta)), 1.0/Ixy_/cos(delta)/cos(delta), 0.0,
-                 0.0, 0.0, 1.0/Ixy_;
-
-        return I_inv *L_;
+    const Vector& Getw() const {
+        return w_;
     }
 
 
@@ -172,9 +168,9 @@ public:
     }
 
     double GetT_rot() const {
-        double w = Getw()(0);
+        double phi_dot = w_(0);
 
-        return 2*M_PI /w;
+        return 2*M_PI /phi_dot;
     }
 
     Matrix GetRotMat() const {
@@ -212,6 +208,14 @@ public:
         p_ += incr_p;
     }
 
+    void Setv(const Vector &v) {
+        v_ = v;
+    }
+
+    void Incrementv(const Vector &incr_v) {
+        v_ += incr_v;
+    }
+
     void Setorient(const Vector &orient) {
         orient_ = orient;
         enforce_orient_range_();
@@ -228,6 +232,14 @@ public:
 
     void IncrementL(const Vector &incr_L) {
         L_ += incr_L;
+    }
+
+    void Setw(const Vector &w) {
+        w_ = w;
+    }
+
+    void Incrementw(const Vector &incr_w) {
+        w_ += incr_w;
     }
 
 
@@ -248,12 +260,20 @@ private:
     // dynamic variables of the body
     Vector x_; // position
     Vector p_; // translational momentum
+    Vector v_; // velocity
     Vector orient_; // orientation: (0): rotation angle, (1): pole RA, (2): pole Dec
     Vector L_; // angular momentum: components corresponding to orientation vector
+    Vector w_; // angular velocity: components corresponding to orientation vector
 
     void enforce_orient_range_() {
+        // enforce that: phi \in [0, 2\pi],
+        //               alpha \in [0, 2\pi],
+        //               delta \in [-\pi/2, \pi/2]
+        double& phi = orient_(0);
         double& alpha = orient_(1);
         double& delta = orient_(2);
+
+        phi = fmod(phi, 2*M_PI);
 
         delta = fmod(delta, 2*M_PI);
         if (delta > 3*M_PI/2) { // 3pi/2 < delta < 2pi
@@ -303,6 +323,14 @@ public:
         return p_arr;
     }
 
+    VectorArray<N> Getv() const {
+        VectorArray<N> v_arr;
+        for (unsigned i = 0; i < N; i++) {
+            v_arr.row(i) = body_arr_[i].Getv();
+        }
+        return v_arr;
+    }
+
     VectorArray<N> Getorient() const {
         VectorArray<N> orient_arr;
         for (unsigned i = 0; i < N; i++) {
@@ -317,6 +345,14 @@ public:
             L_arr.row(i) = body_arr_[i].GetL();
         }
         return L_arr;
+    }
+
+    VectorArray<N> Getw() const {
+        VectorArray<N> w_arr;
+        for (unsigned i = 0; i < N; i++) {
+            w_arr.row(i) = body_arr_[i].Getw();
+        }
+        return w_arr;
     }
 
 
@@ -344,6 +380,18 @@ public:
         }
     }
 
+    void Setv(const VectorArray<N> &v) {
+        for (unsigned i = 0; i < N; i++) {
+            body_arr_[i].Setv(v.row(i));
+        }
+    }
+
+    void Incrementv(const VectorArray<N> &incr_v) {
+        for (unsigned i = 0; i < N; i++) {
+            body_arr_[i].Incrementv(incr_v.row(i));
+        }
+    }
+
     void Setorient(const VectorArray<N> &orient) {
         for (unsigned i = 0; i < N; i++) {
             body_arr_[i].Setorient(orient.row(i));
@@ -365,6 +413,18 @@ public:
     void IncrementL(const VectorArray<N> &incr_L) {
         for (unsigned i = 0; i < N; i++) {
             body_arr_[i].IncrementL(incr_L.row(i));
+        }
+    }
+
+    void Setw(const VectorArray<N> &w) {
+        for (unsigned i = 0; i < N; i++) {
+            body_arr_[i].Setw(w.row(i));
+        }
+    }
+
+    void Incrementw(const VectorArray<N> &incr_w) {
+        for (unsigned i = 0; i < N; i++) {
+            body_arr_[i].Incrementw(incr_w.row(i));
         }
     }
 
