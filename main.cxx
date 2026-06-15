@@ -46,54 +46,8 @@ int main() {
     fs::create_directory(folder);
 
 
-    std::function<void(double, BodyArray<N>&)> H_kin_update = [&](double dt, BodyArray<N> &bodies)
-    {   // do an update of the phase space states according to the kinetic part of the Hamiltonian
-        // this must only depend on the momenta
-        VectorArray<N> x_dot = dH_kin_dp(bodies);
-        VectorArray<N> orient_dot = dH_kin_dL(bodies);
-
-        bodies.Incrementx(x_dot*dt);
-        bodies.Incrementorient(orient_dot*dt);
-    };
-
-    std::function<void(double, BodyArray<N>&)> H_pot_update = [&](double dt, BodyArray<N> &bodies)
-    {   // do an update of the phase space states according to the potential part of the Hamiltonian
-        // this must only depend on the coordinated
-        VectorArray<N> p_dot = -dH_pot_dx(bodies);
-        VectorArray<N> L_dot = -dH_pot_dorient(bodies);
-
-        bodies.Incrementp(p_dot*dt);
-        bodies.IncrementL(L_dot*dt);
-    };
-
-    std::function<void(double, BodyArray<N>&)> H_pert_update = [&](double dt, BodyArray<N> &bodies)
-    {   // do an update of the phase space states according to the perturbation part of the Hamiltonian
-        // this can depend on both coordinated and momenta but must be small (i.e. a perturbation)
-        VectorArray<N> x0 = bodies.Getx();
-        VectorArray<N> p0 = bodies.Getp();
-
-        // do a fixed point iteration for x_mid = (x+x0)/2 starting at x_mid = x0 (and equivalently for p)
-        VectorArray<N> x_mid = x0;
-        VectorArray<N> p_mid = p0;
-
-        for (unsigned i = 0; i < 2; i++) {
-            bodies.Setx(x_mid);
-            bodies.Setp(p_mid);
-
-            VectorArray<N> x_dot = dH_pert_dp(bodies);
-            VectorArray<N> p_dot = -dH_pert_dx(bodies);
-
-            x_mid = x0 + dt/2 *x_dot;
-            p_mid = p0 + dt/2 *p_dot;
-        }
-
-        bodies.Setx(2*x_mid - x0);
-        bodies.Setp(2*p_mid - p0);
-    };
-
-
     // initialize solver
-    Forest_Ruth<N> solver(H_kin_update, H_pot_update, H_pert_update, initial_bodies, t0);
+    Forest_Ruth<N> solver(initial_bodies, t0);
 
     const double &t = solver.GetCurrentTime();
     const Body &sun = solver.GetCurrentBody(0);
