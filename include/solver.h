@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include <include/utils.h>
+#include <include/physics.h>
 
 
 #ifndef SOLVER_H_INCLUDED

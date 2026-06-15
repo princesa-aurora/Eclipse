@@ -18,7 +18,6 @@
 // translational data:
 // taken from NASA JPL Horizons System (https://ssd.jpl.nasa.gov/horizons/app.html#/)
 // units are: x[km], t[s], v[km/s], GM[km^3/s^2], M[E+24kg]
-// R is volumetric mean radius
 
 // rotational data::
 // taken from IAU Report (https://www.usgs.gov/publications/report-iau-working-group-cartographic-coordinates-and-rotational-elements-2015)
@@ -31,7 +30,6 @@ Vector x0_sun(-1.067706805381631E+06, -3.960361847950951E+05, -1.380651842864990
 Vector v0_sun(9.312571926508239E-03, -1.170150612818866E-02, -5.251266205204772E-03);
 double GM_sun(132712440041.93938);
 double M_sun = GM_sun /PHYS_G;
-double R_sun(695700.0);
 
 double alpha0_sun(286.13*M_PI/180.0);
 double delta0_sun(63.87*M_PI/180.0);
@@ -40,8 +38,8 @@ double phi0_sun = W0_sun + alpha0_sun - M_PI/2;
 double phi_dot0_sun(14.1844000*M_PI/180.0/86400.0);
 double alpha_dot0_sun(0.0);
 double delta_dot0_sun(0.0);
-double a_sun(R_sun); // no noticable oblateness
-double b_sun(R_sun);
+double a_sun(695700.0); // no noticable oblateness
+double b_sun(695700.0);
 double i_f_sun = 0.070;
 double Iz_sun = i_f_sun *M_sun*a_sun*a_sun;
 double Ixy_sun = i_f_sun *M_sun*(a_sun*a_sun + b_sun*b_sun)/2;
@@ -59,7 +57,6 @@ Vector x0_mercury(-2.052943316392625E+07, -6.032400395765506E+07, -3.01308378635
 Vector v0_mercury(3.700430442865286E+01, -8.541376791212787E+00, -8.398372410524413E+00);
 double GM_mercury(22031.86855);
 double M_mercury = GM_mercury /PHYS_G;
-double R_mercury(2439.4);
 
 double alpha0_mercury(281.0103*M_PI/180.0);
 double delta0_mercury(61.4155*M_PI/180.0);
@@ -87,7 +84,6 @@ Vector x0_venus(-1.085242008576727E+08, -7.318564957348876E+06, 3.54812186238824
 Vector v0_venus(1.391218600360602E+00, -3.202951993786435E+01, -1.449708673944476E+01);
 double GM_venus(324858.592);
 double M_venus = GM_venus /PHYS_G;
-double R_venus(6051.84);
 
 double alpha0_venus(272.76*M_PI/180.0);
 double delta0_venus(67.16*M_PI/180.0);
@@ -96,8 +92,8 @@ double phi0_venus = W0_venus + alpha0_venus - M_PI/2;
 double phi_dot0_venus(-1.4813688*M_PI/180.0/86400.0);
 double alpha_dot0_venus(0.0);
 double delta_dot0_venus(0.0);
-double a_venus(R_venus); // no noticable oblateness
-double b_venus(R_venus);
+double a_venus(6051.84); // no noticable oblateness
+double b_venus(6051.84);
 double i_f_venus = 0.337;
 double Iz_venus = i_f_venus *M_venus*a_venus*a_venus;
 double Ixy_venus = i_f_venus *M_venus*(a_venus*a_venus + b_venus*b_venus)/2;
@@ -115,7 +111,6 @@ Vector x0_earth(-2.756674048064499E+07, 1.323613811539150E+08, 5.741865328641246
 Vector v0_earth(-2.978494749858966E+01, -5.029753814524049E+00, -2.180645068860803E+00);
 double GM_earth(398600.435436);
 double M_earth = GM_earth /PHYS_G;
-double R_earth(6371.01);
 
 double alpha0_earth(0.0); // irrelevant since delta0_earth=90°
 double delta0_earth(90.0*M_PI/180.0); // by definition of ICRF
@@ -143,7 +138,6 @@ Vector x0_moon(-2.785834886487951E+07, 1.320946643201093E+08, 5.734255079912778E
 Vector v0_moon(-2.914141610973326E+01, -5.695841497599683E+00, -2.481970773555618E+00);
 double GM_moon(4902.800066);
 double M_moon = GM_moon /PHYS_G;
-double R_moon(1737.53);
 
 double alpha0_moon(266.9326060656449*M_PI/180.0); // all moon data taken from the 2009 report
 double delta0_moon(65.64567138250604*M_PI/180.0);
@@ -171,7 +165,6 @@ Vector x0_mars(2.069804338363758E+08, -1.864170129960323E+05, -5.667227498237504
 Vector v0_mars(1.171984975915371E+00, 2.390670819298864E+01, 1.093392065055535E+01);
 double GM_mars(42828.375662);
 double M_mars = GM_mars /PHYS_G;
-double R_mars(3389.92);
 
 double alpha0_mars(317.269202*M_PI/180.0);
 double delta0_mars(54.432516*M_PI/180.0);
@@ -199,7 +192,6 @@ Vector x0_jupiter(5.974998767931225e+08, 4.089903139310188e+08, 1.60756281938389
 Vector v0_jupiter(-7.900525116626677, 10.17179630924754, 4.552467787266711);
 double GM_jupiter(126712764.1);
 double M_jupiter = GM_jupiter /PHYS_G;
-double R_jupiter(69911.0);
 
 double alpha0_jupiter(268.05677758224186*M_PI/180.0);
 double delta0_jupiter(64.49489190378664*M_PI/180.0);
@@ -227,7 +219,6 @@ Vector x0_saturn(9.573174174148824e+08, 9.233196218965478e+08, 3.401628003884089
 Vector v0_saturn(-7.422709426010933, 6.097474815232451, 2.837682288256848);
 double GM_saturn(37940584.8418);
 double M_saturn = GM_saturn /PHYS_G;
-double R_saturn(58232.0);
 
 double alpha0_saturn(40.589*M_PI/180.0);
 double delta0_saturn(83.537*M_PI/180.0);
@@ -255,7 +246,6 @@ Vector x0_uranus(2.157907312953506e+09, -1.871306838939868e+09, -8.5010680003141
 Vector v0_uranus(4.646336807878913, 4.251152675973469, 1.796172785810810);
 double GM_uranus(5794565.6);
 double M_uranus = GM_uranus /PHYS_G;
-double R_uranus(25362.0);
 
 double alpha0_uranus(257.311*M_PI/180.0);
 double delta0_uranus(-15.175*M_PI/180.0);
@@ -283,7 +273,6 @@ Vector x0_neptune(2.513978721723395e+09, -3.438170140317066e+09, -1.469851523011
 Vector v0_neptune(4.475214621751574, 2.877104855637495, 1.066200548145686);
 double GM_neptune(6836525.2);
 double M_neptune = GM_neptune /PHYS_G;
-double R_neptune(24624.0);
 
 double alpha0_neptune(299.33373895877264*M_PI/180.0);
 double delta0_neptune(42.95035902184485*M_PI/180.0);

@@ -6,6 +6,10 @@
 
 #include <include/utils.h>
 
+#ifndef PHYSICS_H_INCLUDED
+#define PHYSICS_H_INCLUDED
+
+
 
 template<unsigned N>
 VectorArray<N> p_of_v(const BodyArray<N> &bodies)
@@ -277,4 +281,8 @@ VectorArray<N> dH_pert_dp(const BodyArray<N> &bodies)
 
     return v;
 };
+
+
+
+#endif // PHYSICS_H_INCLUDED
 
