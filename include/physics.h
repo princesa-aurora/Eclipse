@@ -25,7 +25,21 @@ public:
     Hamiltonian(BodyArray<N> initial_bodies, double t0) :
         bodies_(initial_bodies), t_(t0)
     {
-        // initialize p and L
+        Compute_moment_of_inertia();
+        VectorArray<N> p_Newton;
+        VectorArray<N> L_Newton;
+        for (unsigned i = 0; i < N; i++) {
+            const double& M = bodies_[i].GetM();
+            const Vector& v = bodies_[i].Getv();
+            const Vector& w = bodies_[i].Getw();
+            p_Newton.row(i) = M*v;
+            L_Newton.row(i) = I_[i]*w;
+        }
+        // seed p and L with the Newtonian approximations to use for perturbation contributions that depend on v(p) and w(L)
+        bodies_.Setp(p_Newton);
+        bodies_.SetL(L_Newton);
+
+        // initialize the true p and L (i.e. including the perturbations)
         VectorArray<N> p = p_of_v();
         VectorArray<N> L = L_of_w();
         bodies_.Setp(p);
@@ -43,10 +57,31 @@ public:
     }
 
 
+private:
+    friend class Forest_Ruth<N>;
+
+    BodyArray<N> bodies_;
+    double t_;
+
+    heap_array<double, N> Phi_;
+    heap_array<Vector, N> Theta_;
+    VectorArray<N> pos_Phi_Theta_;
+
+    heap_array<Vector, N> grad_Phi_;
+    heap_array<Matrix, N> grad_Theta_;
+
+    heap_array<Vector, N> grad_Lambda_;
+
+    heap_array<Matrix, N> I_;
+    heap_array<Matrix, N> I_inv_;
+    heap_array<Matrix, N> I_inv_prime_;
+
+
     VectorArray<N> p_of_v()
     {
         // get the momenta from the velocities
-        Compute_lo_metric();
+        Compute_Phi_grad_Phi();
+        Compute_Theta_grad_Theta();
 
         VectorArray<N> p;
         for (unsigned i = 0; i < N; i++) {
@@ -64,14 +99,15 @@ public:
     VectorArray<N> v_of_p()
     {
         // get the velocities from the momenta
-        Compute_lo_metric();
+        Compute_Phi_grad_Phi();
+        Compute_Theta_grad_Theta();
 
         VectorArray<N> v;
         for (unsigned i = 0; i < N; i++) {
             const double& M = bodies_[i].GetM();
             const Vector& p = bodies_[i].Getp();
 
-            v.row(i) = p /M
+            v.row(i) = p/M
                         + PHYS_inv_c2 *(-1.0/(2*M*M*M) *p.squaredNorm()*p + 3.0/M *Phi_[i]*p + 4.0 *Theta_[i]);
         }
 
@@ -127,15 +163,14 @@ public:
     VectorArray<N> dH_pot_dx()
     {
         // derivative of the potential Hamiltonian wrt. position
-        Compute_lo_metric();
-        Compute_grad_Lambda();
+        Compute_Phi_grad_Phi();
 
         VectorArray<N> NegF = VectorArray<N>::Zero();
         for (unsigned i = 0; i < N; i++) {
             const double& M = bodies_[i].GetM();
 
             NegF.row(i) = M*grad_Phi_[i]
-                            + PHYS_inv_c2 *(M *Phi_[i]*grad_Phi_[i] + M/2 *grad_Lambda_[i]);
+                            + PHYS_inv_c2 *(M *Phi_[i]*grad_Phi_[i]);
         }
 
         Vector negf;
@@ -241,14 +276,16 @@ public:
     VectorArray<N> dH_pert_dx()
     {
         // derivative of the perturbation Hamiltonian wrt. position
-        Compute_lo_metric();
+        Compute_Phi_grad_Phi();
+        Compute_Theta_grad_Theta();
+        Compute_grad_Lambda();
 
         VectorArray<N> NegF;
         for (unsigned i = 0; i < N; i++) {
             const double& M = bodies_[i].GetM();
             const Vector& p = bodies_[i].Getp();
 
-            NegF.row(i) = PHYS_inv_c2 *(4 *grad_Theta_[i]*p + 3.0/(2*M) *grad_Phi_[i]*p.squaredNorm());
+            NegF.row(i) = PHYS_inv_c2 *(4 *grad_Theta_[i]*p + 3.0/(2*M) *grad_Phi_[i]*p.squaredNorm() + M/2 *grad_Lambda_[i]);
         }
 
         return NegF;
@@ -258,7 +295,8 @@ public:
     VectorArray<N> dH_pert_dp()
     {
         // derivative of the perturbation Hamiltonian wrt. momentum
-        Compute_lo_metric();
+        Compute_Phi_grad_Phi();
+        Compute_Theta_grad_Theta();
 
         VectorArray<N> v;
         for (unsigned i = 0; i < N; i++) {
@@ -272,34 +310,39 @@ public:
     }
 
 
-private:
-    friend class Forest_Ruth<N>;
-
-    BodyArray<N> bodies_;
-    double t_;
-
-    heap_array<double, N> Phi_;
-    heap_array<Vector, N> Theta_;
-    VectorArray<N> pos_Phi_Theta_;
-
-    heap_array<Vector, N> grad_Phi_;
-    heap_array<Matrix, N> grad_Theta_;
-
-    heap_array<Vector, N> grad_Lambda_;
-
-    heap_array<Matrix, N> I_;
-    heap_array<Matrix, N> I_inv_;
-    heap_array<Matrix, N> I_inv_prime_;
-
-
-    void Compute_lo_metric() {
-        // compute the leading order metric perturbations Phi and Theta
-        // as well as their gradients
+    void Compute_Phi_grad_Phi() {
+        // compute the leading order metric perturbation Phi (aka. the Newtonian gravitational potential)
+        // as well as its gradient
 
         for (unsigned i = 0; i < N; i++) {
             Phi_[i] = 0.0;
-            Theta_[i] = Vector::Zero();
             grad_Phi_[i] = Vector::Zero();
+
+            const Vector& x0 = bodies_[i].Getx();
+
+            for (unsigned j = 0; j < N; j++) {
+                if (j == i) {continue;}
+
+                const double& M = bodies_[j].GetM();
+                const Vector& x = bodies_[j].Getx();
+
+                Vector r_vec = x0 - x;
+                double r = r_vec.norm();
+                Vector e_r = r_vec /r;
+
+                Phi_[i] += -PHYS_G*M /r;
+                grad_Phi_[i] += PHYS_G*M /(r*r) *e_r;
+            }
+        }
+    }
+
+
+    void Compute_Theta_grad_Theta() {
+        // compute the metric perturbation Theta
+        // as well as its gradient
+
+        for (unsigned i = 0; i < N; i++) {
+            Theta_[i] = Vector::Zero();
             grad_Theta_[i] = Matrix::Zero();
 
             const Vector& x0 = bodies_[i].Getx();
@@ -309,26 +352,23 @@ private:
 
                 const double& M = bodies_[j].GetM();
                 const Vector& x = bodies_[j].Getx();
-                const Vector& v = bodies_[j].Getv();
+                const Vector& p = bodies_[j].Getp();
+
+                Vector v = p/M;
 
                 Vector r_vec = x0 - x;
                 double r = r_vec.norm();
                 Vector e_r = r_vec /r;
 
-                double Phi_incr = -PHYS_G*M /r;
-                Phi_[i] += Phi_incr;
-                Theta_[i] += -Phi_incr *v;
-
-                Vector grad_Phi_incr = - Phi_incr /r *e_r;
-                grad_Phi_[i] += grad_Phi_incr;
-                grad_Theta_[i] += -grad_Phi_incr *v.transpose();
+                Theta_[i] += PHYS_G*M /r *v;
+                grad_Theta_[i] += -PHYS_G*M /(r*r) *e_r *v.transpose();
             }
         }
     }
 
 
     void Compute_grad_Lambda() {
-        // compute the gradient of Lambda
+        // compute the gradient of metric perturbation Lambda
 
         for (unsigned i = 0; i < N; i++) {
             grad_Lambda_[i] = Vector::Zero();
@@ -340,13 +380,14 @@ private:
 
                 const double& M = bodies_[j].GetM();
                 const Vector& x = bodies_[j].Getx();
-                const Vector& v = bodies_[j].Getv();
+                const Vector& p = bodies_[j].Getp();
 
                 Vector r_vec = x0 - x;
                 double r = r_vec.norm();
                 Vector e_r = r_vec /r;
 
-                const Vector& a = -grad_Phi_[j];
+                Vector v = p/M;
+                Vector a = -grad_Phi_[j];
 
                 Vector incr_1 = 4*PHYS_G*M *v.squaredNorm() /(r*r) * e_r;
                 Vector incr_2 = PHYS_G*M* e_r.dot(v) /(r*r) *(2*v - 3*e_r.dot(v) *e_r);
