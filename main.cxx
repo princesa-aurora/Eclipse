@@ -46,8 +46,9 @@ int main() {
     fs::create_directory(folder);
 
 
-    // initialize solver
-    Forest_Ruth<N> solver(initial_bodies, t0);
+    // initialize physics and solver
+    Hamiltonian<N> H(initial_bodies, t0);
+    Forest_Ruth<N> solver(H);
 
     const double &t = solver.GetCurrentTime();
     const Body &sun = solver.GetCurrentBody(0);
