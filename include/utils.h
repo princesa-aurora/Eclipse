@@ -17,9 +17,6 @@
 #define UTILS_H_INCLUDED
 
 
-double PHYS_G = 6.6743015E+04; // km3/(1e24 kg)/s^2, Newtons constant of gravity
-double PHYS_c = 299792.458; // km/s, speed of light
-
 
 using Vector = Eigen::Vector3d;
 using Matrix = Eigen::Matrix3d;

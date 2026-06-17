@@ -10,15 +10,18 @@
 #define PHYSICS_H_INCLUDED
 
 
+constexpr double PHYS_G = 6.6743015E+04; // km3/(1e24 kg)/s^2, Newtons constant of gravity
+constexpr double PHYS_c = 299792.458; // km/s, speed of light
+constexpr double PHYS_inv_c2 = 1.0/(PHYS_c*PHYS_c); // 1/c^2
+
+
+
 template<unsigned N>
 class Hamiltonian {
 public:
     Hamiltonian(BodyArray<N> initial_bodies, double t0) :
         bodies_(initial_bodies), t_(t0)
-    {
-        Compute_lo_metric();
-        Compute_grad_Lambda();
-    }
+    {}
 
     double& Gett() {
         return t_;
@@ -40,7 +43,8 @@ public:
             const double& M = bodies_[i].GetM();
             const Vector& v = bodies_[i].Getv();
 
-            p.row(i) = M*v + M/(2*PHYS_c*PHYS_c) *v.squaredNorm()*v - 3*M/(PHYS_c*PHYS_c) *Phi_[i]*v - 4*M/(PHYS_c*PHYS_c) *Theta_[i];
+            p.row(i) = M*v
+                        + PHYS_inv_c2 *(M/2 *v.squaredNorm()*v - 3*M *Phi_[i]*v - 4*M *Theta_[i]);
         }
 
         return p;
@@ -57,7 +61,8 @@ public:
             const double& M = bodies_[i].GetM();
             const Vector& p = bodies_[i].Getp();
 
-            v.row(i) = p /M - 1.0/(2*PHYS_c*PHYS_c*M*M*M) *p.squaredNorm()*p + 3.0/(PHYS_c*PHYS_c*M) *Phi_[i]*p + 4.0/(PHYS_c*PHYS_c) *Theta_[i];
+            v.row(i) = p /M
+                        + PHYS_inv_c2 *(-1.0/(2*M*M*M) *p.squaredNorm()*p + 3.0/M *Phi_[i]*p + 4.0 *Theta_[i]);
         }
 
         return v;
@@ -67,17 +72,12 @@ public:
     VectorArray<N> L_of_w()
     {
         // get the angular momenta from the angular velocities
+        Compute_moment_of_inertia();
+
         VectorArray<N> L;
         for (unsigned i = 0; i < N; i++) {
             const Vector& w = bodies_[i].Getw();
-            const double& delta = bodies_[i].Getorient()(2);
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-            Matrix I;
-            I << Iz, -Iz*(1.0-sin(delta)), 0.0,
-                -Iz*(1.0-sin(delta)), Ixy*cos(delta)*cos(delta) + Iz*(1.0-sin(delta))*(1.0-sin(delta)), 0.0,
-                0.0, 0.0,Ixy;
-            L.row(i) = I *w;
+            L.row(i) = I_[i] *w;
         }
 
         return L;
@@ -87,17 +87,12 @@ public:
     VectorArray<N> w_of_L()
     {
         // get the angular velocities from the angular momenta
+        Compute_moment_of_inertia();
+
         VectorArray<N> w;
         for (unsigned i = 0; i < N; i++) {
             const Vector& L = bodies_[i].GetL();
-            const double& delta = bodies_[i].Getorient()(2);
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-            Matrix I_inv;
-            I_inv << 1.0/Iz + 1.0/Ixy*cos(delta)*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 1.0/Ixy/(1.0+sin(delta)), 0.0,
-                    1.0/Ixy/(1.0+sin(delta)), 1.0/Ixy/cos(delta)/cos(delta), 0.0,
-                    0.0, 0.0, 1.0/Ixy;
-            w.row(i) = I_inv *L;
+            w.row(i) = I_inv_[i] *L;
         }
 
         return w;
@@ -111,7 +106,8 @@ public:
         for (unsigned i = 0; i < N; i++) {
             const Vector& p = bodies_[i].Getp();
             const double& M = bodies_[i].GetM();
-            v.row(i) = p/M - 1.0/(2*PHYS_c*PHYS_c*M*M*M) *p.squaredNorm()*p;
+            v.row(i) = p/M
+                        + PHYS_inv_c2 *(-1.0/(2*M*M*M) *p.squaredNorm()*p);
         }
 
         return v;
@@ -128,7 +124,8 @@ public:
         for (unsigned i = 0; i < N; i++) {
             const double& M = bodies_[i].GetM();
 
-            NegF.row(i) = M*grad_Phi_[i] + M/(PHYS_c*PHYS_c) *Phi_[i]*grad_Phi_[i] + M/(2*PHYS_c*PHYS_c) *grad_Lambda_[i];
+            NegF.row(i) = M*grad_Phi_[i]
+                            + PHYS_inv_c2 *(M *Phi_[i]*grad_Phi_[i] + M/2 *grad_Lambda_[i]);
         }
 
         Vector negf;
@@ -183,6 +180,8 @@ public:
     VectorArray<N> dH_pot_dorient()
     {
         // derivative of the potential Hamiltonian wrt. orientation
+        Compute_moment_of_inertia();
+
         VectorArray<N> NegTorque = VectorArray<N>::Zero();
         Vector negtorque;
         Vector r_vec;
@@ -206,11 +205,6 @@ public:
             const Vector ealpha(-sin(alpha), cos(alpha), 0.0);
             const Vector edelta(-sin(delta)*cos(alpha), -sin(delta)*sin(alpha), cos(delta));
 
-            Matrix I_inv_prime;
-            I_inv_prime << -2.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 0.0,
-                            -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0,
-                            0.0, 0.0, 0.0;
-
             for (unsigned j = 0; j < N; j++) {
                 if (j == i) {continue;}
                 const Vector& y = bodies_[j].Getx();
@@ -224,7 +218,7 @@ public:
 
                 negtorque(0) = 0.0;
                 negtorque(1) = -3*PHYS_G*Mx*My*r3_inv*a*a*J2*ewer*(ealpha.dot(e_r))*cos(delta);
-                negtorque(2) = 1.0/2*(I_inv_prime *L).dot(L)
+                negtorque(2) = 1.0/2*(I_inv_prime_[i] *L).dot(L)
                             - 3*PHYS_G*Mx*My*r3_inv*a*a*J2*ewer*(edelta.dot(e_r));
 
                 NegTorque.row(i) += negtorque;
@@ -244,7 +238,7 @@ public:
             const double& M = bodies_[i].GetM();
             const Vector& p = bodies_[i].Getp();
 
-            NegF.row(i) = 4/(PHYS_c*PHYS_c) *grad_Theta_[i]*p + 3.0/(2*PHYS_c*PHYS_c*M) *grad_Phi_[i]*p.squaredNorm();
+            NegF.row(i) = PHYS_inv_c2 *(4 *grad_Theta_[i]*p + 3.0/(2*M) *grad_Phi_[i]*p.squaredNorm());
         }
 
         return NegF;
@@ -261,7 +255,7 @@ public:
             const double& M = bodies_[i].GetM();
             const Vector& p = bodies_[i].Getp();
 
-            v.row(i) = 4.0/(PHYS_c*PHYS_c) *Theta_[i] + 3.0/(PHYS_c*PHYS_c*M) *Phi_[i]*p;
+            v.row(i) = PHYS_inv_c2 *(4.0 *Theta_[i] + 3.0/M *Phi_[i]*p);
         }
 
         return v;
@@ -282,6 +276,10 @@ private:
     heap_array<Matrix, N> grad_Theta_;
 
     heap_array<Vector, N> grad_Lambda_;
+
+    heap_array<Matrix, N> I_;
+    heap_array<Matrix, N> I_inv_;
+    heap_array<Matrix, N> I_inv_prime_;
 
 
     void Compute_lo_metric() {
@@ -347,6 +345,31 @@ private:
 
                 grad_Lambda_[i] += incr_1 + incr_2 + incr_3 + incr_4;
             }
+        }
+    }
+
+
+    void Compute_moment_of_inertia()
+    {
+        // compute the moment of inertia tensor and its inverse
+        // as well as the derivative of the inverse wrt. to delta
+
+        for (unsigned i = 0; i < N; i++) {
+            const double& delta = bodies_[i].Getorient()(2);
+            const double& Ixy = bodies_[i].GetIxy();
+            const double& Iz = bodies_[i].GetIz();
+
+            I_[i] << Iz, -Iz*(1.0-sin(delta)), 0.0,
+                -Iz*(1.0-sin(delta)), Ixy*cos(delta)*cos(delta) + Iz*(1.0-sin(delta))*(1.0-sin(delta)), 0.0,
+                0.0, 0.0,Ixy;
+
+            I_inv_[i] << 1.0/Iz + 1.0/Ixy*cos(delta)*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 1.0/Ixy/(1.0+sin(delta)), 0.0,
+                    1.0/Ixy/(1.0+sin(delta)), 1.0/Ixy/cos(delta)/cos(delta), 0.0,
+                    0.0, 0.0, 1.0/Ixy;
+
+            I_inv_prime_[i] << -2.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 0.0,
+                            -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0,
+                            0.0, 0.0, 0.0;
         }
     }
 

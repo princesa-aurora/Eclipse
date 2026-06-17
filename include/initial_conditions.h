@@ -10,6 +10,7 @@
 
 
 #include <include/utils.h>
+#include <include/physics.h>
 
 #ifndef INITIAL_CONDITIONS_H_INCLUDED
 #define INITIAL_CONDITIONS_H_INCLUDED
