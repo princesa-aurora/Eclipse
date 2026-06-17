@@ -76,6 +76,9 @@ private:
     heap_array<Matrix, N> I_inv_;
     heap_array<Matrix, N> I_inv_prime_;
 
+    VectorArray<N> x_cached_Phi_;
+    VectorArray<N> orient_cached_I_;
+
 
     VectorArray<N> p_of_v()
     {
@@ -313,6 +316,7 @@ private:
     void Compute_Phi_grad_Phi() {
         // compute the leading order metric perturbation Phi (aka. the Newtonian gravitational potential)
         // as well as its gradient
+        if (bodies_.Getx() == x_cached_Phi_) {return;}
 
         for (unsigned i = 0; i < N; i++) {
             Phi_[i] = 0.0;
@@ -334,6 +338,8 @@ private:
                 grad_Phi_[i] += PHYS_G*M /(r*r) *e_r;
             }
         }
+
+        x_cached_Phi_ = bodies_.Getx();
     }
 
 
@@ -404,6 +410,7 @@ private:
     {
         // compute the moment of inertia tensor and its inverse
         // as well as the derivative of the inverse wrt. to delta
+        if (bodies_.Getorient() == orient_cached_I_) {return;}
 
         for (unsigned i = 0; i < N; i++) {
             const double& delta = bodies_[i].Getorient()(2);
@@ -422,6 +429,8 @@ private:
                             -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0,
                             0.0, 0.0, 0.0;
         }
+
+        orient_cached_I_ = bodies_.Getorient();
     }
 
 };
