@@ -12,35 +12,16 @@
 
 
 // Forest-Ruth 4th order symplectic integrator for N body system
-template<size_t N>
+template<unsigned N>
 class Forest_Ruth {
 
 public:
     // constructor
     Forest_Ruth(
-        Hamiltonian<N> H)
+        Hamiltonian<N>& H)
         :
         H_(H)
-    {
-        // initialize p and L
-        VectorArray<N> p = H_.p_of_v();
-        VectorArray<N> L = H_.L_of_w();
-        bodies_.Setp(p);
-        bodies_.SetL(L);
-    }
-
-    // destructor
-    ~Forest_Ruth() = default;
-
-    // get the last time
-    const double& GetCurrentTime() const {
-        return t_;
-    }
-
-    // get the current bodies
-    const Body& GetCurrentBody(unsigned idx) const {
-        return bodies_[idx];
-    }
+    {}
 
     // make a step of the Forest Ruth algorithm
     void MakeStep(double dt) {
@@ -58,11 +39,11 @@ public:
 
 private:
     // Hamiltonian instance
-    Hamiltonian<N> H_;
+    Hamiltonian<N>& H_;
     // current time
-    double& t_ = H_.Gett();
+    double& t_ = H_.t_;
     // current bodies
-    BodyArray<N>& bodies_ = H_.Getbodies();
+    BodyArray<N>& bodies_ = H_.bodies_;
 
     // algorithm constants
     static constexpr double c1 = 1/(2-cbrt(2));
@@ -94,9 +75,6 @@ private:
         ComputeLeapFrogStep(c2*dt);
         ComputeLeapFrogStep(c1*dt);
     }
-
-
-
 
 
     void H_kin_update(double dt)
@@ -145,9 +123,6 @@ private:
         bodies_.Setx(2*x_mid - x0);
         bodies_.Setp(2*p_mid - p0);
     }
-
-
-
 
 };
 

@@ -50,10 +50,10 @@ int main() {
     Hamiltonian<N> H(initial_bodies, t0);
     Forest_Ruth<N> solver(H);
 
-    const double &t = solver.GetCurrentTime();
-    const Body &sun = solver.GetCurrentBody(0);
-    const Body &earth = solver.GetCurrentBody(1);
-    const Body &moon = solver.GetCurrentBody(2);
+    const double &t = H.GetCurrentTime();
+    const Body &sun = H.GetCurrentBody(0);
+    const Body &earth = H.GetCurrentBody(1);
+    const Body &moon = H.GetCurrentBody(2);
 
     // create sampling grid for eclipse occultation data (Fibonacci sphere)
     heap_array<double, grid_size> lon_grid;

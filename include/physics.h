@@ -15,22 +15,32 @@ constexpr double PHYS_c = 299792.458; // km/s, speed of light
 constexpr double PHYS_inv_c2 = 1.0/(PHYS_c*PHYS_c); // 1/c^2
 
 
+// forward declare Forest_Ruth solver class to be visible here (definition is in solver.h)
+template <unsigned N> class Forest_Ruth;
+
 
 template<unsigned N>
 class Hamiltonian {
 public:
     Hamiltonian(BodyArray<N> initial_bodies, double t0) :
         bodies_(initial_bodies), t_(t0)
-    {}
+    {
+        // initialize p and L
+        VectorArray<N> p = p_of_v();
+        VectorArray<N> L = L_of_w();
+        bodies_.Setp(p);
+        bodies_.SetL(L);
+    }
 
-    double& Gett() {
+    // get the current time
+    const double& GetCurrentTime() const {
         return t_;
     }
 
-    BodyArray<N>& Getbodies() {
-        return bodies_;
+    // get the current body
+    const Body& GetCurrentBody(unsigned idx) const {
+        return bodies_[idx];
     }
-
 
 
     VectorArray<N> p_of_v()
@@ -262,9 +272,9 @@ public:
     }
 
 
-
-
 private:
+    friend class Forest_Ruth<N>;
+
     BodyArray<N> bodies_;
     double t_;
 
