@@ -9,6 +9,7 @@
 #include <include/utils.h>
 #include <include/initial_conditions.h>
 #include <include/solver.h>
+#include <include/physics.h>
 
 namespace fs = std::filesystem;
 
@@ -45,146 +46,14 @@ int main() {
     fs::create_directory(folder);
 
 
-    std::function<VectorArray<N>(const BodyArray<N>&)> x_dot = [&](const BodyArray<N> &bodies)
-    {
-        // position time derivative
-        VectorArray<N> v;
-        for (unsigned i = 0; i < N; i++) {
-            v.row(i) = bodies[i].Getv();
-        }
-        return v;
-    };
+    // initialize physics and solver
+    Hamiltonian<N> H(initial_bodies, t0);
+    Forest_Ruth<N> solver(H);
 
-    std::function<VectorArray<N>(const BodyArray<N>&)> p_dot = [&](const BodyArray<N> &bodies)
-    {
-        // momentum time derivative
-
-        //std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
-
-        VectorArray<N> F = VectorArray<N>::Zero();
-        Vector f;
-        Vector r_vec;
-        double r;
-        Vector e_r;
-        double r2_inv;
-        double ewxer;
-        double ewyer;
-
-        for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies[i].Getx();
-            const double& Mx = bodies[i].GetM();
-            const double& Rx = bodies[i].GetR();
-            const double& J2x = bodies[i].GetJ2();
-            const Vector ewx = bodies[i].GetAxis();
-
-            for (unsigned j = 0; j < i; j++) {
-                const Vector& y = bodies[j].Getx();
-                const double& My = bodies[j].GetM();
-                const double& Ry = bodies[j].GetR();
-                const double& J2y = bodies[j].GetJ2();
-                const Vector ewy = bodies[j].GetAxis();
-
-                r_vec = y - x;
-                r = r_vec.norm();
-                e_r = r_vec /r;
-                r2_inv = 1/(r*r);
-                ewxer = ewx.dot(e_r);
-                ewyer = ewy.dot(e_r);
-
-                f = PHYS_G*Mx*My*r2_inv *(e_r
-                    +3*J2x*(Rx*Rx*r2_inv)*((2.5*ewxer*ewxer - 0.5)*e_r - ewxer*ewx)
-                    +3*J2y*(Ry*Ry*r2_inv)*((2.5*ewyer*ewyer - 0.5)*e_r - ewyer*ewy));
-
-                F.row(i) += f;
-                F.row(j) -= f;
-            }
-        }
-
-        //std::chrono::_V2::system_clock::time_point stop = std::chrono::high_resolution_clock::now();
-        //std::cout << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << std::endl;
-
-        return F;
-    };
-
-
-    std::function<VectorArray<N>(const BodyArray<N>&)> orient_dot = [&](const BodyArray<N> &bodies)
-    {
-        // rotation angle time derivative
-        VectorArray<N> w;
-        for (unsigned i = 0; i < N; i++) {
-            w.row(i) = bodies[i].Getw();
-        }
-        return w;
-    };
-
-    std::function<VectorArray<N>(const BodyArray<N>&)> L_dot = [&](const BodyArray<N> &bodies)
-    {
-        // angular momentum time derivative
-
-        //std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
-
-        VectorArray<N> Torque = VectorArray<N>::Zero();
-        Vector torque;
-        Vector r_vec;
-        double r;
-        Vector e_r;
-        double r3_inv;
-        double ewer;
-
-        for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies[i].Getx();
-            const double& alpha = bodies[i].Getorient()(1);
-            const double& delta = bodies[i].Getorient()(2);
-            const Vector& L = bodies[i].GetL();
-            const double& Mx = bodies[i].GetM();
-            const double& Ixy = bodies[i].GetIxy();
-            const double& Iz = bodies[i].GetIz();
-            const double& R = bodies[i].GetR();
-            const double& J2 = bodies[i].GetJ2();
-            const Vector ew = bodies[i].GetAxis();
-
-            const Vector ealpha(-sin(alpha), cos(alpha), 0.0);
-            const Vector edelta(-sin(delta)*cos(alpha), -sin(delta)*sin(alpha), cos(delta));
-
-            Matrix I_inv_prime;
-            I_inv_prime << -2.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 0.0,
-                           -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0,
-                            0.0, 0.0, 0.0;
-
-            for (unsigned j = 0; j < N; j++) {
-                if (j == i) {continue;}
-                const Vector& y = bodies[j].Getx();
-                const double& My = bodies[j].GetM();
-
-                r_vec = y - x;
-                r = r_vec.norm();
-                e_r = r_vec /r;
-                r3_inv = 1/(r*r*r);
-                ewer = ew.dot(e_r);
-
-                torque(0) = 0.0;
-                torque(1) = 3*PHYS_G*Mx*My*r3_inv*R*R*J2*ewer*(ealpha.dot(e_r))*cos(delta);
-                torque(2) = -1.0/2*(I_inv_prime *L).dot(L)
-                            + 3*PHYS_G*Mx*My*r3_inv*R*R*J2*ewer*(edelta.dot(e_r));
-
-                Torque.row(i) += torque;
-            }
-        }
-
-        //std::chrono::_V2::system_clock::time_point stop = std::chrono::high_resolution_clock::now();
-        //std::cout << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << std::endl;
-
-        return Torque;
-    };
-
-
-    // initialize solver
-    Forest_Ruth<N> solver(x_dot, p_dot, orient_dot, L_dot, initial_bodies, t0);
-
-    const double &t = solver.GetCurrentTime();
-    const Body &sun = solver.GetCurrentBody(0);
-    const Body &earth = solver.GetCurrentBody(1);
-    const Body &moon = solver.GetCurrentBody(2);
+    const double &t = H.GetCurrentTime();
+    const Body &sun = H.GetCurrentBody(0);
+    const Body &earth = H.GetCurrentBody(1);
+    const Body &moon = H.GetCurrentBody(2);
 
     // create sampling grid for eclipse occultation data (Fibonacci sphere)
     heap_array<double, grid_size> lon_grid;
