@@ -176,14 +176,6 @@ private:
                             + PHYS_inv_c2 *(M *Phi_[i]*grad_Phi_[i]);
         }
 
-        Vector negf;
-        Vector r_vec;
-        double r;
-        Vector e_r;
-        double r2_inv;
-        double ewxer;
-        double ewyer;
-
         for (unsigned i = 0; i < N; i++) {
             const Vector& x = bodies_[i].Getx();
             const double& Mx = bodies_[i].GetM();
@@ -198,14 +190,14 @@ private:
                 const double& J2y = bodies_[j].GetJ2();
                 const Vector ewy = bodies_[j].GetAxis();
 
-                r_vec = x - y;
-                r = r_vec.norm();
-                e_r = r_vec /r;
-                r2_inv = 1/(r*r);
-                ewxer = ewx.dot(e_r);
-                ewyer = ewy.dot(e_r);
+                Vector r_vec = x - y;
+                double r = r_vec.norm();
+                Vector e_r = r_vec /r;
+                double r2_inv = 1/(r*r);
+                double ewxer = ewx.dot(e_r);
+                double ewyer = ewy.dot(e_r);
 
-                negf = PHYS_G*Mx*My*r2_inv *(
+                Vector negf = PHYS_G*Mx*My*r2_inv *(
                     -3*J2x*(ax*ax*r2_inv)*((2.5*ewxer*ewxer - 0.5)*e_r - ewxer*ewx)
                     -3*J2y*(ay*ay*r2_inv)*((2.5*ewyer*ewyer - 0.5)*e_r - ewyer*ewy));
 
@@ -231,12 +223,6 @@ private:
         Compute_moment_of_inertia();
 
         VectorArray<N> NegTorque = VectorArray<N>::Zero();
-        Vector negtorque;
-        Vector r_vec;
-        double r;
-        Vector e_r;
-        double r3_inv;
-        double ewer;
 
         for (unsigned i = 0; i < N; i++) {
             const Vector& x = bodies_[i].Getx();
@@ -258,11 +244,12 @@ private:
                 const Vector& y = bodies_[j].Getx();
                 const double& My = bodies_[j].GetM();
 
-                r_vec = y - x;
-                r = r_vec.norm();
-                e_r = r_vec /r;
-                r3_inv = 1/(r*r*r);
-                ewer = ew.dot(e_r);
+                Vector r_vec = y - x;
+                double r = r_vec.norm();
+                Vector e_r = r_vec /r;
+                double r3_inv = 1/(r*r*r);
+                double ewer = ew.dot(e_r);
+                Vector negtorque;
 
                 negtorque(0) = 0.0;
                 negtorque(1) = -3*PHYS_G*Mx*My*r3_inv*a*a*J2*ewer*(ealpha.dot(e_r))*cos(delta);
