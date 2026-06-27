@@ -375,6 +375,7 @@ private:
 
     void Compute_grad_Lambda() {
         // compute the gradient of metric perturbation Lambda
+        Compute_Phi_grad_Phi();
 
         for (unsigned i = 0; i < N; i++) {
             grad_Lambda_[i] = Vector::Zero();
