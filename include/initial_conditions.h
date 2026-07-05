@@ -46,13 +46,15 @@ double i_f_sun = 0.070;
 double Iz_sun = i_f_sun *M_sun*a_sun*a_sun;
 double Ixy_sun = i_f_sun *M_sun*(a_sun*a_sun + b_sun*b_sun)/2;
 double J2_sun = 2.2e-7;
-Vector orient0_sun(phi0_sun, alpha0_sun, delta0_sun);
-Vector w0_sun(phi_dot0_sun, alpha_dot0_sun, delta_dot0_sun);
+std::pair<Quaternion, Quaternion> quaternions_sun = angles_to_quaternions(phi0_sun, alpha0_sun, delta0_sun,
+                                                                phi_dot0_sun, alpha_dot0_sun, delta_dot0_sun);
+Quaternion q0_sun = quaternions_sun.first;
+Quaternion w0_sun = quaternions_sun.second;
 
 Body Sun("Sun",
         M_sun, a_sun, b_sun, i_f_sun, J2_sun,
         x0_sun, v0_sun,
-        orient0_sun, w0_sun);
+        q0_sun, w0_sun);
 
 // Mercury
 Vector x0_mercury(-2.052943316392625E+07, -6.032400395765506E+07, -3.013083786350743E+07);
@@ -74,13 +76,15 @@ double i_f_mercury = 0.346;
 double Iz_mercury = i_f_mercury *M_mercury*a_mercury*a_mercury;
 double Ixy_mercury = i_f_mercury *M_mercury*(a_mercury*a_mercury + b_mercury*b_mercury)/2;
 double J2_mercury = 6.0e-5;
-Vector orient0_mercury(phi0_mercury, alpha0_mercury, delta0_mercury);
-Vector w0_mercury(phi_dot0_mercury, alpha_dot0_mercury, delta_dot0_mercury);
+std::pair<Quaternion, Quaternion> quaternions_mercury = angles_to_quaternions(phi0_mercury, alpha0_mercury, delta0_mercury,
+                                                                phi_dot0_mercury, alpha_dot0_mercury, delta_dot0_mercury);
+Quaternion q0_mercury = quaternions_mercury.first;
+Quaternion w0_mercury = quaternions_mercury.second;
 
 Body Mercury("Mercury",
         M_mercury, a_mercury, b_mercury, i_f_mercury, J2_mercury,
         x0_mercury, v0_mercury,
-        orient0_mercury, w0_mercury);
+        q0_mercury, w0_mercury);
 
 // Venus
 Vector x0_venus(-1.085242008576727E+08, -7.318564957348876E+06, 3.548121862388247E+06);
@@ -102,13 +106,15 @@ double i_f_venus = 0.337;
 double Iz_venus = i_f_venus *M_venus*a_venus*a_venus;
 double Ixy_venus = i_f_venus *M_venus*(a_venus*a_venus + b_venus*b_venus)/2;
 double J2_venus = 4.4e-6;
-Vector orient0_venus(phi0_venus, alpha0_venus, delta0_venus);
-Vector w0_venus(phi_dot0_venus, alpha_dot0_venus, delta_dot0_venus);
+std::pair<Quaternion, Quaternion> quaternions_venus = angles_to_quaternions(phi0_venus, alpha0_venus, delta0_venus,
+                                                                phi_dot0_venus, alpha_dot0_venus, delta_dot0_venus);
+Quaternion q0_venus = quaternions_venus.first;
+Quaternion w0_venus = quaternions_venus.second;
 
 Body Venus("Venus",
         M_venus, a_venus, b_venus, i_f_venus, J2_venus,
         x0_venus, v0_venus,
-        orient0_venus, w0_venus);
+        q0_venus, w0_venus);
 
 // Earth (Terra)
 Vector x0_earth(-2.756674048064499E+07, 1.323613811539150E+08, 5.741865328641246E+07);
@@ -130,13 +136,15 @@ double i_f_earth = 0.3307;
 double Iz_earth = i_f_earth *M_earth*a_earth*a_earth;
 double Ixy_earth = i_f_earth *M_earth*(a_earth*a_earth + b_earth*b_earth)/2;
 double J2_earth = 1.08263e-3;
-Vector orient0_earth(phi0_earth, alpha0_earth, delta0_earth);
-Vector w0_earth(phi_dot0_earth, alpha_dot0_earth, delta_dot0_earth);
+std::pair<Quaternion, Quaternion> quaternions_earth = angles_to_quaternions(phi0_earth, alpha0_earth, delta0_earth,
+                                                                phi_dot0_earth, alpha_dot0_earth, delta_dot0_earth);
+Quaternion q0_earth = quaternions_earth.first;
+Quaternion w0_earth = quaternions_earth.second;
 
 Body Earth("Earth",
         M_earth, a_earth, b_earth, i_f_earth, J2_earth,
         x0_earth, v0_earth,
-        orient0_earth, w0_earth);
+        q0_earth, w0_earth);
 
 // Moon (Luna)
 Vector x0_moon(-2.785834886487951E+07, 1.320946643201093E+08, 5.734255079912778E+07);
@@ -158,13 +166,15 @@ double i_f_moon = 0.3929;
 double Iz_moon = i_f_moon *M_moon*a_moon*a_moon;
 double Ixy_moon = i_f_moon *M_moon*(a_moon*a_moon + b_moon*b_moon)/2;
 double J2_moon = 2.027e-4;
-Vector orient0_moon(phi0_moon, alpha0_moon, delta0_moon);
-Vector w0_moon(phi_dot0_moon, alpha_dot0_moon, delta_dot0_moon);
+std::pair<Quaternion, Quaternion> quaternions_moon = angles_to_quaternions(phi0_moon, alpha0_moon, delta0_moon,
+                                                                phi_dot0_moon, alpha_dot0_moon, delta_dot0_moon);
+Quaternion q0_moon = quaternions_moon.first;
+Quaternion w0_moon = quaternions_moon.second;
 
 Body Moon("Moon",
         M_moon, a_moon, b_moon, i_f_moon, J2_moon,
         x0_moon, v0_moon,
-        orient0_moon, w0_moon);
+        q0_moon, w0_moon);
 
 // Mars
 Vector x0_mars(2.069804338363758E+08, -1.864170129960323E+05, -5.667227498237504E+06);
@@ -186,13 +196,15 @@ double i_f_mars = 0.3644;
 double Iz_mars = i_f_mars *M_mars*a_mars*a_mars;
 double Ixy_mars = i_f_mars *M_mars*(a_mars*a_mars + b_mars*b_mars)/2;
 double J2_mars = 1.960e-3;
-Vector orient0_mars(phi0_mars, alpha0_mars, delta0_mars);
-Vector w0_mars(phi_dot0_mars, alpha_dot0_mars, delta_dot0_mars);
+std::pair<Quaternion, Quaternion> quaternions_mars = angles_to_quaternions(phi0_mars, alpha0_mars, delta0_mars,
+                                                                phi_dot0_mars, alpha_dot0_mars, delta_dot0_mars);
+Quaternion q0_mars = quaternions_mars.first;
+Quaternion w0_mars = quaternions_mars.second;
 
 Body Mars("Mars",
         M_mars, a_mars, b_mars, i_f_mars, J2_mars,
         x0_mars, v0_mars,
-        orient0_mars, w0_mars);
+        q0_mars, w0_mars);
 
 // Jupiter
 Vector x0_jupiter(5.974998767931225e+08, 4.089903139310188e+08, 1.607562819383890e+08);
@@ -214,13 +226,15 @@ double i_f_jupiter = 0.2756;
 double Iz_jupiter = i_f_jupiter *M_jupiter*a_jupiter*a_jupiter;
 double Ixy_jupiter = i_f_jupiter *M_jupiter*(a_jupiter*a_jupiter + b_jupiter*b_jupiter)/2;
 double J2_jupiter = 1.4736e-2;
-Vector orient0_jupiter(phi0_jupiter, alpha0_jupiter, delta0_jupiter);
-Vector w0_jupiter(phi_dot0_jupiter, alpha_dot0_jupiter, delta_dot0_jupiter);
+std::pair<Quaternion, Quaternion> quaternions_jupiter = angles_to_quaternions(phi0_jupiter, alpha0_jupiter, delta0_jupiter,
+                                                                phi_dot0_jupiter, alpha_dot0_jupiter, delta_dot0_jupiter);
+Quaternion q0_jupiter = quaternions_jupiter.first;
+Quaternion w0_jupiter = quaternions_jupiter.second;
 
 Body Jupiter("Jupiter",
         M_jupiter, a_jupiter, b_jupiter, i_f_jupiter, J2_jupiter,
         x0_jupiter, v0_jupiter,
-        orient0_jupiter, w0_jupiter);
+        q0_jupiter, w0_jupiter);
 
 // Saturn
 Vector x0_saturn(9.573174174148824e+08, 9.233196218965478e+08, 3.401628003884089e+08);
@@ -242,13 +256,15 @@ double i_f_saturn = 0.2234;
 double Iz_saturn = i_f_saturn *M_saturn*a_saturn*a_saturn;
 double Ixy_saturn = i_f_saturn *M_saturn*(a_saturn*a_saturn + b_saturn*b_saturn)/2;
 double J2_saturn = 1.6291e-2;
-Vector orient0_saturn(phi0_saturn, alpha0_saturn, delta0_saturn);
-Vector w0_saturn(phi_dot0_saturn, alpha_dot0_saturn, delta_dot0_saturn);
+std::pair<Quaternion, Quaternion> quaternions_saturn = angles_to_quaternions(phi0_saturn, alpha0_saturn, delta0_saturn,
+                                                                phi_dot0_saturn, alpha_dot0_saturn, delta_dot0_saturn);
+Quaternion q0_saturn = quaternions_saturn.first;
+Quaternion w0_saturn = quaternions_saturn.second;
 
 Body Saturn("Saturn",
         M_saturn, a_saturn, b_saturn, i_f_saturn, J2_saturn,
         x0_saturn, v0_saturn,
-        orient0_saturn, w0_saturn);
+        q0_saturn, w0_saturn);
 
 // Uranus
 Vector x0_uranus(2.157907312953506e+09, -1.871306838939868e+09, -8.501068000314130e+08);
@@ -270,13 +286,15 @@ double i_f_uranus = 0.23;
 double Iz_uranus = i_f_uranus *M_uranus*a_uranus*a_uranus;
 double Ixy_uranus = i_f_uranus *M_uranus*(a_uranus*a_uranus + b_uranus*b_uranus)/2;
 double J2_uranus = 3.341e-3;
-Vector orient0_uranus(phi0_uranus, alpha0_uranus, delta0_uranus);
-Vector w0_uranus(phi_dot0_uranus, alpha_dot0_uranus, delta_dot0_uranus);
+std::pair<Quaternion, Quaternion> quaternions_uranus = angles_to_quaternions(phi0_uranus, alpha0_uranus, delta0_uranus,
+                                                                phi_dot0_uranus, alpha_dot0_uranus, delta_dot0_uranus);
+Quaternion q0_uranus = quaternions_uranus.first;
+Quaternion w0_uranus = quaternions_uranus.second;
 
 Body Uranus("Uranus",
         M_uranus, a_uranus, b_uranus, i_f_uranus, J2_uranus,
         x0_uranus, v0_uranus,
-        orient0_uranus, w0_uranus);
+        q0_uranus, w0_uranus);
 
 // Neptune
 Vector x0_neptune(2.513978721723395e+09, -3.438170140317066e+09, -1.469851523011037e+09);
@@ -298,13 +316,15 @@ double i_f_neptune = 0.23;
 double Iz_neptune = i_f_neptune *M_neptune*a_neptune*a_neptune;
 double Ixy_neptune = i_f_neptune *M_neptune*(a_neptune*a_neptune + b_neptune*b_neptune)/2;
 double J2_neptune = 3.408e-3;
-Vector orient0_neptune(phi0_neptune, alpha0_neptune, delta0_neptune);
-Vector w0_neptune(phi_dot0_neptune, alpha_dot0_neptune, delta_dot0_neptune);
+std::pair<Quaternion, Quaternion> quaternions_neptune = angles_to_quaternions(phi0_neptune, alpha0_neptune, delta0_neptune,
+                                                                phi_dot0_neptune, alpha_dot0_neptune, delta_dot0_neptune);
+Quaternion q0_neptune = quaternions_neptune.first;
+Quaternion w0_neptune = quaternions_neptune.second;
 
 Body Neptune("Neptune",
         M_neptune, a_neptune, b_neptune, i_f_neptune, J2_neptune,
         x0_neptune, v0_neptune,
-        orient0_neptune, w0_neptune);
+        q0_neptune, w0_neptune);
 
 
 

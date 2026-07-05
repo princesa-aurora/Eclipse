@@ -21,10 +21,168 @@
 using Vector = Eigen::Vector3d;
 using Matrix = Eigen::Matrix3d;
 
+class Quaternion : public Eigen::Vector4d {
+public:
+    typedef Eigen::Vector4d Base;
+
+    Quaternion()
+        : Base() {}
+
+    Quaternion(const Base& data)
+        : Base(data) {}
+
+    Quaternion(double scal, double x, double y, double z)
+        : Base(scal, x, y, z) {}
+
+    Quaternion(double scal, const Vector& vec)
+        : Base(scal, vec.x(), vec.y(), vec.z()) {}
+
+
+    static Quaternion Constant(double val) {
+        return Quaternion(val, val, val, val);
+    }
+
+    static Quaternion Zero() {
+        return Quaternion::Constant(0.0);
+    }
+
+
+    static Quaternion Identity() {
+        return Quaternion(1.0, 0.0, 0.0, 0.0);
+    }
+
+    static Quaternion i() {
+        return Quaternion(0.0, 1.0, 0.0, 0.0);
+    }
+
+    static Quaternion j() {
+        return Quaternion(0.0, 0.0, 1.0, 0.0);
+    }
+
+    static Quaternion k() {
+        return Quaternion(0.0, 0.0, 0.0, 1.0);
+    }
+
+
+    template<typename OtherDerived>
+    Quaternion(const Eigen::MatrixBase<OtherDerived>& other) : Base(other) {}
+
+    template<typename OtherDerived>
+    Quaternion& operator=(const Eigen::MatrixBase<OtherDerived>& other) {
+        this->Base::operator=(other);
+        return *this;
+    }
+
+
+    double& scalar() {
+        return (*this)(0); 
+    }
+
+    const double& scalar() const {
+        return (*this)(0);
+    }
+
+    Eigen::Ref<Vector> vector() {
+        return (*this).tail<3>();
+    }
+
+    Eigen::Ref<const Vector> vector() const {
+        return (*this).tail<3>();
+    }
+
+
+    Quaternion operator+(const Quaternion& other) const {
+        return Quaternion(this->Base::operator+(other));
+    }
+
+    Quaternion& operator+=(const Quaternion& other) {
+        this->Base::operator+=(other);
+        return *this;
+    }
+
+    Quaternion operator-(const Quaternion& other) const {
+        return Quaternion(this->Base::operator-(other));
+    }
+
+    Quaternion& operator-=(const Quaternion& other) {
+        this->Base::operator-=(other);
+        return *this;
+    }
+
+    Quaternion operator*(double scalar) const {
+        return Quaternion(this->Base::operator*(scalar));
+    }
+
+    Quaternion& operator*=(double scalar) {
+        this->Base::operator*=(scalar);
+        return *this;
+    }
+
+    Quaternion operator/(double scalar) const {
+        return Quaternion(this->Base::operator/(scalar));
+    }
+
+    Quaternion& operator/=(double scalar) {
+        this->Base::operator/=(scalar);
+        return *this;
+    }
+
+
+    Quaternion conjugate() const {
+        return Quaternion(this->scalar(), -this->vector());
+    }
+
+    Quaternion inverse() const {
+        double squared_norm = this->squaredNorm();
+        return this->conjugate() /squared_norm;
+    }
+
+    Vector rotate(const Vector& vec) const {
+        return (*this * Quaternion(0.0, vec) * this->conjugate()).vector();
+    }
+
+    Quaternion operator*(const Quaternion& other) const {
+        double result_scal = this->scalar()*other.scalar() - this->vector().dot(other.vector());
+        Vector result_vec = this->scalar()*other.vector() + this->vector()*other.scalar() + this->vector().cross(other.vector());
+
+        return Quaternion(result_scal, result_vec);
+    }
+
+    Quaternion& operator*=(const Quaternion& other) {
+        *this = *this * other;
+        return *this;
+    }
+};
+
+Quaternion operator*(double scalar, const Quaternion& q) {
+        return q *scalar;
+    }
+
+
 template<unsigned N>
-using ScalarArray = Eigen::Vector<double, N>;
+using ScalarArray = Eigen::Matrix<double, N, 1>;
 template<unsigned N>
 using VectorArray = Eigen::Matrix<double, N, 3>;
+template<unsigned N>
+using QuaternionArray = Eigen::Matrix<double, N, 4>;
+
+
+
+std::pair<Quaternion, Quaternion> angles_to_quaternions(double phi, double alpha, double delta,
+                                double phi_dot, double alpha_dot, double delta_dot) {
+    // represent the orientation angles as a quaternion (and same for the time derivative)
+    Vector axis(cos(delta)*cos(alpha), cos(delta)*sin(alpha), sin(delta));
+    Vector axis_dot(-sin(delta)*delta_dot*cos(alpha) -cos(delta)*sin(alpha)*alpha_dot,
+                    -sin(delta)*delta_dot*sin(alpha) +cos(delta)*cos(alpha)*alpha_dot,
+                     cos(delta)*delta_dot);
+
+    Quaternion q(cos(phi/2), sin(phi/2) *axis);
+
+    Quaternion w(-sin(phi/2) *phi_dot/2, cos(phi/2) *phi_dot/2 *axis + sin(phi/2) *axis_dot);
+
+    return {q, w};
+}
+
 
 
 template <typename T, size_t k>
@@ -74,8 +232,8 @@ public:
 
         Vector x0,
         Vector v0,
-        Vector orient0,
-        Vector w0) :
+        Quaternion q0,
+        Quaternion w0) :
     name_(name),
     M_(M),
     a_(a),
@@ -84,13 +242,13 @@ public:
     i_f_(i_f),
     Iz_(i_f*M*a*a),
     Ixy_(i_f/2.0*M*(a*a+b*b)),
-    J2_(J2),
+    J2_(0.0), //J2),
 
     x_(x0),
     p_(Vector::Constant(NAN)),
     v_(v0),
-    orient_(orient0),
-    L_(Vector::Constant(NAN)),
+    q_(q0),
+    L_(Quaternion::Constant(NAN)),
     w_(w0)
     {}
 
@@ -139,11 +297,11 @@ public:
         return p_;
     }
 
-    const Vector& Getorient() const {
-        return orient_;
+    const Quaternion& Getq() const {
+        return q_;
     }
 
-    const Vector& GetL() const {
+    const Quaternion& GetL() const {
         return L_;
     }
 
@@ -152,40 +310,19 @@ public:
         return v_;
     }
 
-    const Vector& Getw() const {
+    const Quaternion& Getw() const {
         return w_;
     }
 
 
     Vector GetAxis() const {
-        const double& alpha = orient_(1);
-        const double& delta = orient_(2);
-
-        return Vector(cos(delta)*cos(alpha), cos(delta)*sin(alpha), sin(delta));
+        return q_.vector().normalized();
     }
 
     double GetT_rot() const {
-        double phi_dot = w_(0);
+        double omega = 2*w_.norm();
 
-        return 2*M_PI /phi_dot;
-    }
-
-    Matrix GetRotMat() const {
-        // get the rotation matrix that transforms from terrestrial coordinates to celestial ones
-        const double& phi = orient_(0);
-        const double& alpha = orient_(1);
-        const double& delta = orient_(2);
-
-        Matrix RotMat_phi;
-        RotMat_phi << cos(phi), -sin(phi), 0.0,
-                      sin(phi), cos(phi), 0.0,
-                      0.0, 0.0, 1.0;
-        Matrix RotMat_axis;
-        RotMat_axis << 1 - cos(alpha)*cos(alpha)*(1.0-sin(delta)), -cos(alpha)*sin(alpha)*(1.0-sin(delta)), cos(delta)*cos(alpha),
-                       -cos(alpha)*sin(alpha)*(1.0-sin(delta)), 1 - sin(alpha)*sin(alpha)*(1.0-sin(delta)), cos(delta)*sin(alpha),
-                       -cos(delta)*cos(alpha), -cos(delta)*sin(alpha), sin(delta);
-
-        return RotMat_axis*RotMat_phi;
+        return 2*M_PI /omega;
     }
 
 
@@ -213,29 +350,29 @@ public:
         v_ += incr_v;
     }
 
-    void Setorient(const Vector &orient) {
-        orient_ = orient;
-        enforce_orient_range_();
+    void Setq(const Quaternion &q) {
+        q_ = q;
+        q_.normalize(); // enforce unit quaternion
     }
 
-    void Incrementorient(const Vector &incr_orient) {
-        orient_ += incr_orient;
-        enforce_orient_range_();
+    void Incrementq(const Quaternion &incr_q) {
+        q_ += incr_q;
+        q_.normalize(); // enforce unit quaternion
     }
 
-    void SetL(const Vector &L) {
+    void SetL(const Quaternion &L) {
         L_ = L;
     }
 
-    void IncrementL(const Vector &incr_L) {
+    void IncrementL(const Quaternion &incr_L) {
         L_ += incr_L;
     }
 
-    void Setw(const Vector &w) {
+    void Setw(const Quaternion &w) {
         w_ = w;
     }
 
-    void Incrementw(const Vector &incr_w) {
+    void Incrementw(const Quaternion &incr_w) {
         w_ += incr_w;
     }
 
@@ -258,32 +395,9 @@ private:
     Vector x_; // position
     Vector p_; // translational momentum
     Vector v_; // velocity
-    Vector orient_; // orientation: (0): rotation angle, (1): pole RA, (2): pole Dec
-    Vector L_; // angular momentum: components corresponding to orientation vector
-    Vector w_; // angular velocity: components corresponding to orientation vector
-
-    void enforce_orient_range_() {
-        // enforce that: phi \in [0, 2\pi],
-        //               alpha \in [0, 2\pi],
-        //               delta \in [-\pi/2, \pi/2]
-        double& phi = orient_(0);
-        double& alpha = orient_(1);
-        double& delta = orient_(2);
-
-        phi = fmod(phi, 2*M_PI);
-
-        delta = fmod(delta, 2*M_PI);
-        if (delta > 3*M_PI/2) { // 3pi/2 < delta < 2pi
-            delta = delta - 2*M_PI;
-        }
-        else if (delta > M_PI/2) { // pi/2 < delta < 3pi/2
-            delta = M_PI - delta;
-            alpha = alpha + M_PI;
-        }
-        // else: 0 < delta < pi/2 : continue
-
-        alpha = fmod(alpha, 2*M_PI);
-    }
+    Quaternion q_; // orientation quaternion
+    Quaternion L_; // angular momentum (conjugate momentum to q)
+    Quaternion w_; // angular velocity (time derivative of q)
 };
 
 
@@ -328,24 +442,24 @@ public:
         return v_arr;
     }
 
-    VectorArray<N> Getorient() const {
-        VectorArray<N> orient_arr;
+    QuaternionArray<N> Getq() const {
+        QuaternionArray<N> q_arr;
         for (unsigned i = 0; i < N; i++) {
-            orient_arr.row(i) = body_arr_[i].Getorient();
+            q_arr.row(i) = body_arr_[i].Getq();
         }
-        return orient_arr;
+        return q_arr;
     }
 
-    VectorArray<N> GetL() const {
-        VectorArray<N> L_arr;
+    QuaternionArray<N> GetL() const {
+        QuaternionArray<N> L_arr;
         for (unsigned i = 0; i < N; i++) {
             L_arr.row(i) = body_arr_[i].GetL();
         }
         return L_arr;
     }
 
-    VectorArray<N> Getw() const {
-        VectorArray<N> w_arr;
+    QuaternionArray<N> Getw() const {
+        QuaternionArray<N> w_arr;
         for (unsigned i = 0; i < N; i++) {
             w_arr.row(i) = body_arr_[i].Getw();
         }
@@ -389,37 +503,37 @@ public:
         }
     }
 
-    void Setorient(const VectorArray<N> &orient) {
+    void Setq(const QuaternionArray<N> &q) {
         for (unsigned i = 0; i < N; i++) {
-            body_arr_[i].Setorient(orient.row(i));
+            body_arr_[i].Setq(q.row(i));
         }
     }
 
-    void Incrementorient(const VectorArray<N> &incr_orient) {
+    void Incrementq(const QuaternionArray<N> &incr_q) {
         for (unsigned i = 0; i < N; i++) {
-            body_arr_[i].Incrementorient(incr_orient.row(i));
+            body_arr_[i].Incrementq(incr_q.row(i));
         }
     }
 
-    void SetL(const VectorArray<N> &L) {
+    void SetL(const QuaternionArray<N> &L) {
         for (unsigned i = 0; i < N; i++) {
             body_arr_[i].SetL(L.row(i));
         }
     }
 
-    void IncrementL(const VectorArray<N> &incr_L) {
+    void IncrementL(const QuaternionArray<N> &incr_L) {
         for (unsigned i = 0; i < N; i++) {
             body_arr_[i].IncrementL(incr_L.row(i));
         }
     }
 
-    void Setw(const VectorArray<N> &w) {
+    void Setw(const QuaternionArray<N> &w) {
         for (unsigned i = 0; i < N; i++) {
             body_arr_[i].Setw(w.row(i));
         }
     }
 
-    void Incrementw(const VectorArray<N> &incr_w) {
+    void Incrementw(const QuaternionArray<N> &incr_w) {
         for (unsigned i = 0; i < N; i++) {
             body_arr_[i].Incrementw(incr_w.row(i));
         }
@@ -574,11 +688,11 @@ double utc_date_and_time_to_j2000(std::string date_str, std::string time_str) {
 
 
 double compute_sun_zenith(double lon, double lat, const Body &earth, const Body &sun) {
-    // at lon, lat on earths surface what is the zenith of the sun?
+    // at lon, lat on earths surface what is the zenith of the sun? // account for oblateness of earth in position vector
 
     Vector pos_on_earth(cos(lat)*cos(lon), cos(lat)*sin(lon), sin(lat));
-    Matrix RotMat_earth = earth.GetRotMat();
-    pos_on_earth = RotMat_earth *pos_on_earth; // rotate from terrestrial frame to ICRF
+    const Quaternion& q_earth = earth.Getq();
+    pos_on_earth = q_earth.rotate(pos_on_earth); // rotate from terrestrial frame to ICRF
 
     Vector earth_to_sun = sun.Getx() - earth.Getx();
     double cos_zen = pos_on_earth.dot(earth_to_sun/earth_to_sun.norm());
@@ -590,8 +704,8 @@ std::array<double, 3> compute_spherical_seen_from_earth(const Body &body, const 
     // what is the bodies distance, lon and lat as seen from the terrestrial frame?
 
     Vector r = body.Getx() - earth.Getx();
-    Matrix RotMat_inv_earth = earth.GetRotMat().transpose();
-    r = RotMat_inv_earth *r; // rotate from ICRF to terrestrial frame
+    const Quaternion& q_earth = earth.Getq();
+    r = q_earth.conjugate().rotate(r); // rotate from ICRF to terrestrial frame
 
     double dist = r.norm();
     double lon = atan2(r(1), r(0));
@@ -721,7 +835,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
     const Vector& x_sun_ICRF = sun.Getx();
     const Vector& v_moon = moon.Getv();
     const Vector& v_sun = sun.Getv();
-    const Matrix RotMat_inv_earth = earth.GetRotMat().transpose();
+    const Quaternion& q_earth = earth.Getq();
 
     // shift ICRF origin to earth
     // x_earth = 0;
@@ -729,8 +843,8 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
     Vector x_sun = x_sun_ICRF - x_earth_ICRF;
 
     // rotate into terrestrial frame
-    x_moon = RotMat_inv_earth *x_moon;
-    x_sun = RotMat_inv_earth *x_sun;
+    x_moon = q_earth.conjugate().rotate(x_moon);
+    x_sun = q_earth.conjugate().rotate(x_sun);
 
     // we need the retarded positions of the sun and moon (ie corrected for light travel time)
     double PHYS_c = 299792.458; // remove before merge!!!!
@@ -796,143 +910,6 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
         // combine topology and angle into a combined classification
         classif_buffer[i] = 4*moon_angle_binned + topology;
     }
-}
-
-
-
-std::array<std::vector<double>, 6> compute_shadow_earth_intersection(const Body &earth, const Body &moon,  const Body &sun) {
-    // compute the intersection curves between the umbra, antumbra and penumbra and the earths surface,
-    // save lon and lat of the curve points in the terrestrial frame in netcdf
-    const double& R_earth = earth.GetR();
-    const double& R_moon = moon.GetR();
-    const double& R_sun = sun.GetR();
-
-    Vector x_earth = earth.Getx();
-    Vector x_moon = moon.Getx();
-    const Vector& x_earth_ICRF = earth.Getx();
-    const Vector& x_sun_ICRF = sun.Getx();
-
-    const Matrix RotMat_inv_earth = earth.GetRotMat().transpose();
-
-    // offset origin to be at the sun
-    x_earth -= x_sun_ICRF;
-    x_moon -= x_sun_ICRF;
-    // x_sun = 0
-
-    double r_moon = x_moon.norm();
-    double theta_moon = asin(x_moon(2)/r_moon);
-    double phi_moon = atan2(x_moon(1), x_moon(0));
-
-    Matrix R_z; // rotate frame to align sun_to_moon with the z-axis
-    R_z << 1 - cos(phi_moon)*cos(phi_moon)*(1.0-sin(theta_moon)), -cos(phi_moon)*sin(phi_moon)*(1.0-sin(theta_moon)), -cos(theta_moon)*cos(phi_moon),
-                       -cos(phi_moon)*sin(phi_moon)*(1.0-sin(theta_moon)), 1 - sin(phi_moon)*sin(phi_moon)*(1.0-sin(theta_moon)), -cos(theta_moon)*sin(phi_moon),
-                       cos(theta_moon)*cos(phi_moon), cos(theta_moon)*sin(phi_moon), sin(theta_moon);
-    x_earth = R_z*x_earth;
-    // x_moon = r_moon * e_z
-    // x_sun = 0
-
-    // compute cylindrical form of x_earth
-    double rho_earth = sqrt(x_earth(0)*x_earth(0) + x_earth(1)*x_earth(1));
-    double beta_earth = atan2(x_earth(1), x_earth(0));
-    double z_earth = x_earth(2);
-
-    // calculate umbral shadow parameters (shadow is a cone: r(t, beta) = t*(A*cos(beta), A*sin(beta), 1))+(0, 0, z0)
-    // antumbra is just the continuation of the umbra beyond the vertex, i.e. no separate parameters are needed
-    double z0_umbral = R_sun*r_moon/(R_sun - R_moon);
-    double A_umbral = (R_sun-R_moon)/sqrt(r_moon*r_moon - (R_sun-R_moon)*(R_sun-R_moon));
-    double t_moon_umbral = (r_moon-z0_umbral)/(A_umbral*A_umbral+1.0); // t at umbral shadow intersection with the moon
-
-    // calculate penumbral shadow parameters
-    double z0_penumbral = R_sun*r_moon/(R_sun+R_moon);
-    double A_penumbral = (R_sun+R_moon)/sqrt(r_moon*r_moon - (R_sun+R_moon)*(R_sun+R_moon));
-    double t_moon_penumbral = (r_moon-z0_penumbral)/(A_penumbral*A_penumbral+1.0); // t at penumbral shadow intersection with the moon
-
-    // sample from intersection of shadow cones with earth: r(t(beta), beta)
-    // thereby exclude points located on the side of earth that is facing away from the sun (it's dark there anyways)
-    // umbral and antumbral intersections are split as antumbral: (t(beta) > 0) and umbral: (t_umbral_moon < t(beta) < 0)
-    std::vector<double> umbral_lon;
-    std::vector<double> umbral_lat;
-    std::vector<double> antumbral_lon;
-    std::vector<double> antumbral_lat;
-    std::vector<double> penumbral_lon;
-    std::vector<double> penumbral_lat;
-    double beta;
-    double a_mn, b_mn, c_mn, D_mn;
-    Vector x;
-    double lon, lat;
-
-    unsigned K = 2000;
-    for (unsigned k = 0; k < K; k++) {
-        beta = 2*M_PI*k/K;
-
-        // start with umbral/antumbral shadow
-        a_mn = A_umbral*A_umbral + 1.0;
-        b_mn = 2*(z0_umbral-z_earth - rho_earth*A_umbral*cos(beta-beta_earth));
-        c_mn = (z0_umbral-z_earth)*(z0_umbral-z_earth) + rho_earth*rho_earth - R_earth*R_earth;
-        D_mn = b_mn*b_mn - 4*a_mn*c_mn;
-
-        if (D_mn >= 0.0) { // D_mn is positive => intersection exists
-
-            // consider the positive and negative branches of the midnight formula
-            for (double t : {(-b_mn + sqrt(D_mn))/2/a_mn, (-b_mn - sqrt(D_mn))/2/a_mn}) {
-                x = Vector(t*A_umbral*cos(beta), t*A_umbral*sin(beta), t+z0_umbral);
-
-                // undo all the previous transformations to get x in ICRF
-                x = R_z.transpose()*x;
-                x += x_sun_ICRF;
-                // apply the inverse of earths rotation matrix to transform into the terrestrial frame
-                x = RotMat_inv_earth*(x-x_earth_ICRF);
-
-                // now extract lon and lat
-                lon = atan2(x(1), x(0));
-                lat = atan(x(2)/sqrt(x(0)*x(0)+x(1)*x(1)));
-
-                // save the results while distinguishing between antumbral (t > 0) and umbral (t_moon < t < 0) intersections,
-                // if t < t_moon_umbral no eclipe happens, so don't save
-                if (t > 0.0) {
-                    antumbral_lon.push_back(lon);
-                    antumbral_lat.push_back(lat);
-                }
-                else if (t > t_moon_umbral) {
-                    umbral_lon.push_back(lon);
-                    umbral_lat.push_back(lat);
-                }
-            }
-        }
-
-        // now do the penumbral shadow
-        a_mn = A_penumbral*A_penumbral + 1.0;
-        b_mn = 2*(z0_penumbral-z_earth - rho_earth*A_penumbral*cos(beta-beta_earth));
-        c_mn = (z0_penumbral-z_earth)*(z0_penumbral-z_earth) + rho_earth*rho_earth - R_earth*R_earth;
-        D_mn = b_mn*b_mn - 4*a_mn*c_mn;
-
-        if (D_mn >= 0.0) { // D_mn is positive => intersection exists
-
-            // consider the positive and negative branches of the midnight formula
-            for (double t : {(-b_mn + sqrt(D_mn))/2/a_mn, (-b_mn - sqrt(D_mn))/2/a_mn}) {
-                x = Vector(t*A_penumbral*cos(beta), t*A_penumbral*sin(beta), t+z0_penumbral);
-
-                // undo all the previous transformations to get x in ICRF
-                x = R_z.transpose()*x;
-                x += x_sun_ICRF;
-                // apply the inverse of earths rotation matrix to transform into the terrestrial frame
-                x = RotMat_inv_earth*(x-x_earth_ICRF);
-
-                // now extract lon and lat
-                lon = atan2(x(1), x(0));
-                lat = atan(x(2)/sqrt(x(0)*x(0)+x(1)*x(1)));
-
-                // save the results
-                // if t < t_moon_penumbral no eclipe happens, so don't save
-                if (t > t_moon_penumbral) {
-                    penumbral_lon.push_back(lon);
-                    penumbral_lat.push_back(lat);
-                }
-            }
-        }
-    }
-
-    return {umbral_lon, umbral_lat, antumbral_lon, antumbral_lat, penumbral_lon, penumbral_lat};
 }
 
 
@@ -1068,107 +1045,6 @@ private:
     bool file_active_;
 };
 
-
-
-void write_intersections_to_NetCDF(std::string file_path,
-                                    const std::map<std::string, std::vector<double>> &general_data,
-                                    const std::array<std::vector<double>, 6> &points,
-                                    const std::array<std::vector<uint64_t>, 3> &offsets)
-{
-    // create NetCDF file
-    int ncid;
-    bool status = nc_create(file_path.c_str(), NC_NETCDF4 | NC_CLOBBER, &ncid);
-    if (status != NC_NOERR) {
-        throw std::runtime_error("NetCDF: Failed to create file: " + file_path);
-    }
-
-    if (general_data.size() == 0) {
-        throw std::invalid_argument("NetCDF: general_data is empty, but it should at least contain time information.");
-    }
-
-    size_t num_steps = general_data.begin()->second.size();
-    for (const std::pair<std::string, std::vector<double>> &data : general_data) {
-        if ((data.second.size() != num_steps)) {
-            throw std::invalid_argument("NetCDF: " +
-                                        data.first + "(" + std::to_string(data.second.size()) + ") must have the same size as " +
-                                        general_data.begin()->first + "(" + std::to_string(num_steps) + ").");
-        }
-    }
-
-    // define general dimension and variables
-    int general_dim;
-    std::map<std::string, int> general_ids_map;
-    nc_def_dim(ncid, "general", num_steps, &general_dim);
-
-    for (const std::pair<std::string, std::vector<double>> data : general_data) {
-        nc_def_var(ncid, data.first.c_str(), NC_DOUBLE, 1, &general_dim, &general_ids_map[data.first]);
-    }
-
-    // create groups for each shadow type and define variables in them
-    std::array<std::string, 3> grp_names{"umbra", "antumbra", "penumbra"};
-    std::array<std::array<int, 6>, 3> grp_ids;
-
-    for (unsigned i : {0, 1, 2}) {
-        std::string grp_name = grp_names[i];
-        int& grp_id = grp_ids[i][0];
-        int& lon_id = grp_ids[i][1];
-        int& lat_id = grp_ids[i][2];
-        int& offsets_id = grp_ids[i][3];
-        int& points_dim = grp_ids[i][4];
-        int& offsets_dim = grp_ids[i][5];
-
-        const std::vector<double> &lon = points[2*i];
-        const std::vector<double> &lat = points [2*i+1];
-        const std::vector<uint64_t> &offset = offsets[i];
-        if (lon.size() != lat.size()) { // check that lon and lat have same length
-            throw std::invalid_argument("NetCDF: group " + grp_name + ": lon(" + std::to_string(lon.size()) + ") and lat(" + std::to_string(lat.size()) + ") must have the same size.");
-        }
-        if (offset.size() != num_steps +1) {
-            throw std::invalid_argument("NetCDF: group " + grp_name + ": offset(" + std::to_string(offset.size()) + ") must be one longer than times(" + std::to_string(num_steps) + ").");
-        }
-
-        nc_def_grp(ncid, grp_name.c_str(), &grp_id);
-
-        nc_def_dim(grp_id, "points", lat.size(), &points_dim);
-        nc_def_dim(grp_id, "offsets", offset.size(), &offsets_dim);
-
-        nc_def_var(grp_id, "lon", NC_DOUBLE, 1, &points_dim, &lon_id);
-        nc_def_var(grp_id, "lat", NC_DOUBLE, 1, &points_dim, &lat_id);
-        nc_def_var(grp_id, "offsets", NC_UINT64, 1, &offsets_dim, &offsets_id);
-    }
-
-    // close file definition mode
-    nc_enddef(ncid);
-
-
-    // write the general data
-    for (const std::pair<std::string, std::vector<double>> data : general_data) {
-        nc_put_var_double(ncid, general_ids_map[data.first], data.second.data());
-    }
-
-    // write data in each group
-    for (unsigned i : {0, 1, 2}) {
-        std::string grp_name = grp_names[i];
-        int& grp_id = grp_ids[i][0];
-        int& lon_id = grp_ids[i][1];
-        int& lat_id = grp_ids[i][2];
-        int& offsets_id = grp_ids[i][3];
-
-        const std::vector<double> &lon = points[2*i];
-        const std::vector<double> &lat = points [2*i+1];
-        const std::vector<uint64_t> &offset = offsets[i];
-
-        // write lon and lat
-        nc_put_var_double(grp_id, lon_id, lon.data());
-        nc_put_var_double(grp_id, lat_id, lat.data());
-
-        // write offsets
-        nc_put_var_ulonglong(grp_id, offsets_id, reinterpret_cast<const unsigned long long*>(offset.data()));
-    }
-
-    // close file
-    if (ncid >= 0) {nc_close(ncid);}
-}
 
 
 

@@ -25,23 +25,25 @@ public:
     Hamiltonian(BodyArray<N> initial_bodies, double t0) :
         bodies_(initial_bodies), t_(t0)
     {
-        Compute_moment_of_inertia();
-        VectorArray<N> p_Newton;
-        VectorArray<N> L_Newton;
+        VectorArray<N> p_0th;
+        QuaternionArray<N> L_0th;
         for (unsigned i = 0; i < N; i++) {
             const double& M = bodies_[i].GetM();
             const Vector& v = bodies_[i].Getv();
-            const Vector& w = bodies_[i].Getw();
-            p_Newton.row(i) = M*v;
-            L_Newton.row(i) = I_[i]*w;
+            const double& Ixy = bodies_[i].GetIxy();
+            const Quaternion& w = bodies_[i].Getw();
+            p_0th.row(i) = M*v;
+            L_0th.row(i) = 4*Ixy*w;
+
+            lambda0_[i] = 1.0/(8*Ixy)* L_0th.row(i).squaredNorm();
         }
-        // seed p and L with the Newtonian approximations to use for perturbation contributions that depend on v(p) and w(L)
-        bodies_.Setp(p_Newton);
-        bodies_.SetL(L_Newton);
+        // seed p and L with the 0th order approximations to use for perturbation contributions that depend on v(p) and w(L)
+        bodies_.Setp(p_0th);
+        bodies_.SetL(L_0th);
 
         // initialize the true p and L (i.e. including the perturbations)
         VectorArray<N> p = p_of_v();
-        VectorArray<N> L = L_of_w();
+        QuaternionArray<N> L = L_of_w();
         bodies_.Setp(p);
         bodies_.SetL(L);
     }
@@ -72,9 +74,7 @@ private:
 
     heap_array<Vector, N> grad_Lambda_;
 
-    heap_array<Matrix, N> I_;
-    heap_array<Matrix, N> I_inv_;
-    heap_array<Matrix, N> I_inv_prime_;
+    heap_array<double, N> lambda0_;
 
     VectorArray<N> x_cached_Phi_;
     VectorArray<N> orient_cached_I_;
@@ -118,30 +118,34 @@ private:
     }
 
 
-    VectorArray<N> L_of_w()
+    QuaternionArray<N> L_of_w()
     {
         // get the angular momenta from the angular velocities
-        Compute_moment_of_inertia();
-
-        VectorArray<N> L;
+        QuaternionArray<N> L;
         for (unsigned i = 0; i < N; i++) {
-            const Vector& w = bodies_[i].Getw();
-            L.row(i) = I_[i] *w;
+            const double& Ixy = bodies_[i].GetIxy();
+            const double& Iz = bodies_[i].GetIz();
+            const Quaternion& w = bodies_[i].Getw();
+            const Quaternion& q = bodies_[i].Getq();
+
+            L.row(i) = 4*Ixy*w - 4*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *w).scalar() *q *Quaternion::k();
         }
 
         return L;
     }
 
 
-    VectorArray<N> w_of_L()
+    QuaternionArray<N> w_of_L()
     {
         // get the angular velocities from the angular momenta
-        Compute_moment_of_inertia();
-
-        VectorArray<N> w;
+        QuaternionArray<N> w;
         for (unsigned i = 0; i < N; i++) {
-            const Vector& L = bodies_[i].GetL();
-            w.row(i) = I_inv_[i] *L;
+            const double& Ixy = bodies_[i].GetIxy();
+            const double& Iz = bodies_[i].GetIz();
+            const Quaternion& L = bodies_[i].GetL();
+            const Quaternion& q = bodies_[i].Getq();
+
+            w.row(i) = 1.0/(4*Ixy)*L + 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *q *Quaternion::k();
         }
 
         return w;
@@ -210,54 +214,29 @@ private:
     }
 
 
-    VectorArray<N> dH_kin_dL()
+    QuaternionArray<N> dH_kin_dL()
     {
         // derivative of the kinetic Hamiltonian wrt. angular momentum
-        return w_of_L();
+        QuaternionArray<N> w;
+        for (unsigned i = 0; i < N; i++) {
+            const Quaternion& L = bodies_[i].GetL();
+            const double& Ixy = bodies_[i].GetIxy();
+            w.row(i) = L /(4*Ixy);
+        }
+
+        return w;
     }
 
 
-    VectorArray<N> dH_pot_dorient()
+    QuaternionArray<N> dH_pot_dq()
     {
         // derivative of the potential Hamiltonian wrt. orientation
-        Compute_moment_of_inertia();
-
-        VectorArray<N> NegTorque = VectorArray<N>::Zero();
+        QuaternionArray<N> NegTorque = QuaternionArray<N>::Zero();
 
         for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies_[i].Getx();
-            const double& alpha = bodies_[i].Getorient()(1);
-            const double& delta = bodies_[i].Getorient()(2);
-            const Vector& L = bodies_[i].GetL();
-            const double& Mx = bodies_[i].GetM();
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-            const double& a = bodies_[i].Geta();
-            const double& J2 = bodies_[i].GetJ2();
-            const Vector ew = bodies_[i].GetAxis();
+            const Quaternion& q = bodies_[i].Getq();
 
-            const Vector ealpha(-sin(alpha), cos(alpha), 0.0);
-            const Vector edelta(-sin(delta)*cos(alpha), -sin(delta)*sin(alpha), cos(delta));
-
-            for (unsigned j = 0; j < N; j++) {
-                if (j == i) {continue;}
-                const Vector& y = bodies_[j].Getx();
-                const double& My = bodies_[j].GetM();
-
-                Vector r_vec = y - x;
-                double r = r_vec.norm();
-                Vector e_r = r_vec /r;
-                double r3_inv = 1/(r*r*r);
-                double ewer = ew.dot(e_r);
-                Vector negtorque;
-
-                negtorque(0) = 0.0;
-                negtorque(1) = -3*PHYS_G*Mx*My*r3_inv*a*a*J2*ewer*(ealpha.dot(e_r))*cos(delta);
-                negtorque(2) = 1.0/2*(I_inv_prime_[i] *L).dot(L)
-                            - 3*PHYS_G*Mx*My*r3_inv*a*a*J2*ewer*(edelta.dot(e_r));
-
-                NegTorque.row(i) += negtorque;
-            }
+            NegTorque.row(i) = 2*lambda0_[i] *q;            
         }
         return NegTorque;
     }
@@ -297,6 +276,44 @@ private:
         }
 
         return v;
+    }
+
+
+    QuaternionArray<N> dH_pert_dq()
+    {
+        // derivative of the perturbation Hamiltonian wrt. orientation
+
+        QuaternionArray<N> NegTorque;
+        for (unsigned i = 0; i < N; i++) {
+            const double& Ixy = bodies_[i].GetIxy();
+            const double& Iz = bodies_[i].GetIz();
+            const Quaternion& L = bodies_[i].GetL();
+            const Quaternion& q = bodies_[i].Getq();
+
+            double lambda = 1.0/(8*Ixy)* L.squaredNorm();
+
+            NegTorque.row(i) = -1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *L *Quaternion::k()
+                            + 2*(lambda - lambda0_[i])*q;
+        }
+
+        return NegTorque;
+    }
+
+
+    QuaternionArray<N> dH_pert_dL()
+    {
+        // derivative of the perturbation Hamiltonian wrt. angular momentum
+        QuaternionArray<N> w;
+        for (unsigned i = 0; i < N; i++) {
+            const double& Ixy = bodies_[i].GetIxy();
+            const double& Iz = bodies_[i].GetIz();
+            const Quaternion& L = bodies_[i].GetL();
+            const Quaternion& q = bodies_[i].Getq();
+
+            w.row(i) = 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *q *Quaternion::k();
+        }
+
+        return w;
     }
 
 
@@ -391,34 +408,6 @@ private:
                 grad_Lambda_[i] += incr_1 + incr_2 + incr_3 + incr_4;
             }
         }
-    }
-
-
-    void Compute_moment_of_inertia()
-    {
-        // compute the moment of inertia tensor and its inverse
-        // as well as the derivative of the inverse wrt. to delta
-        if (bodies_.Getorient() == orient_cached_I_) {return;}
-
-        for (unsigned i = 0; i < N; i++) {
-            const double& delta = bodies_[i].Getorient()(2);
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-
-            I_[i] << Iz, -Iz*(1.0-sin(delta)), 0.0,
-                -Iz*(1.0-sin(delta)), Ixy*cos(delta)*cos(delta) + Iz*(1.0-sin(delta))*(1.0-sin(delta)), 0.0,
-                0.0, 0.0,Ixy;
-
-            I_inv_[i] << 1.0/Iz + 1.0/Ixy*cos(delta)*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 1.0/Ixy/(1.0+sin(delta)), 0.0,
-                    1.0/Ixy/(1.0+sin(delta)), 1.0/Ixy/cos(delta)/cos(delta), 0.0,
-                    0.0, 0.0, 1.0/Ixy;
-
-            I_inv_prime_[i] << -2.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 0.0,
-                            -1.0/Ixy*cos(delta)/(1.0+sin(delta))/(1.0+sin(delta)), 2.0/Ixy*sin(delta)/cos(delta)/cos(delta)/cos(delta), 0.0,
-                            0.0, 0.0, 0.0;
-        }
-
-        orient_cached_I_ = bodies_.Getorient();
     }
 
 };
