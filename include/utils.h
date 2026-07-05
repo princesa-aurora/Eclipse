@@ -138,14 +138,16 @@ public:
     }
 
     Vector rotate(const Vector& vec) const {
-        return (*this * Quaternion(0.0, vec) * this->conjugate()).vector();
+        return ((*this) * Quaternion(0.0, vec) * this->conjugate()).vector();
     }
 
     Quaternion operator*(const Quaternion& other) const {
-        double result_scal = this->scalar()*other.scalar() - this->vector().dot(other.vector());
-        Vector result_vec = this->scalar()*other.vector() + this->vector()*other.scalar() + this->vector().cross(other.vector());
+        Quaternion result;
 
-        return Quaternion(result_scal, result_vec);
+        result.scalar() = this->scalar()*other.scalar() - this->vector().dot(other.vector());
+        result.vector() = this->scalar()*other.vector() + this->vector()*other.scalar() + this->vector().cross(other.vector());
+
+        return result;
     }
 
     Quaternion& operator*=(const Quaternion& other) {
@@ -689,8 +691,14 @@ double utc_date_and_time_to_j2000(std::string date_str, std::string time_str) {
 
 double compute_sun_zenith(double lon, double lat, const Body &earth, const Body &sun) {
     // at lon, lat on earths surface what is the zenith of the sun? // account for oblateness of earth in position vector
+    const double& a_earth = earth.Geta();
+    const double& b_earth = earth.Getb();
 
-    Vector pos_on_earth(cos(lat)*cos(lon), cos(lat)*sin(lon), sin(lat));
+    double a2 = a_earth*a_earth, b2 = b_earth*b_earth;
+    double cos_lat = cos(lat), sin_lat = sin(lat);
+    double Z = sqrt(a2*cos_lat*cos_lat + b2*sin_lat*sin_lat);
+
+    Vector pos_on_earth = Vector(a2*cos_lat*cos(lon), a2*cos_lat*sin(lon), b2*sin_lat) /Z;
     const Quaternion& q_earth = earth.Getq();
     pos_on_earth = q_earth.rotate(pos_on_earth); // rotate from terrestrial frame to ICRF
 
