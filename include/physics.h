@@ -28,10 +28,11 @@ public:
         VectorArray<N> p_0th;
         QuaternionArray<N> L_0th;
         for (unsigned i = 0; i < N; i++) {
-            const double& M = bodies_[i].GetM();
-            const Vector& v = bodies_[i].Getv();
-            const double& Ixy = bodies_[i].GetIxy();
-            const Quaternion& w = bodies_[i].Getw();
+            const Body& body = bodies_[i];
+            const double& M = body.GetM();
+            const Vector& v = body.Getv();
+            const double& Ixy = body.GetIxy();
+            const Quaternion& w = body.Getw();
             p_0th.row(i) = M*v;
             L_0th.row(i) = 4*Ixy*w;
 
@@ -88,8 +89,9 @@ private:
 
         VectorArray<N> p;
         for (unsigned i = 0; i < N; i++) {
-            const double& M = bodies_[i].GetM();
-            const Vector& v = bodies_[i].Getv();
+            const Body& body = bodies_[i];
+            const double& M = body.GetM();
+            const Vector& v = body.Getv();
 
             p.row(i) = M*v
                         + PHYS_inv_c2 *(M/2 *v.squaredNorm()*v - 3*M *Phi_[i]*v - 4*M *Theta_[i]);
@@ -107,8 +109,9 @@ private:
 
         VectorArray<N> v;
         for (unsigned i = 0; i < N; i++) {
-            const double& M = bodies_[i].GetM();
-            const Vector& p = bodies_[i].Getp();
+            const Body& body = bodies_[i];
+            const double& M = body.GetM();
+            const Vector& p = body.Getp();
 
             v.row(i) = p/M
                         + PHYS_inv_c2 *(-1.0/(2*M*M*M) *p.squaredNorm()*p + 3.0/M *Phi_[i]*p + 4.0 *Theta_[i]);
@@ -123,10 +126,11 @@ private:
         // get the angular momenta from the angular velocities
         QuaternionArray<N> L;
         for (unsigned i = 0; i < N; i++) {
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-            const Quaternion& w = bodies_[i].Getw();
-            const Quaternion& q = bodies_[i].Getq();
+            const Body& body = bodies_[i];
+            const double& Ixy = body.GetIxy();
+            const double& Iz = body.GetIz();
+            const Quaternion& w = body.Getw();
+            const Quaternion& q = body.Getq();
 
             L.row(i) = 4*Ixy*w - 4*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *w).scalar() *q *Quaternion::k();
         }
@@ -140,10 +144,11 @@ private:
         // get the angular velocities from the angular momenta
         QuaternionArray<N> w;
         for (unsigned i = 0; i < N; i++) {
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-            const Quaternion& L = bodies_[i].GetL();
-            const Quaternion& q = bodies_[i].Getq();
+            const Body& body = bodies_[i];
+            const double& Ixy = body.GetIxy();
+            const double& Iz = body.GetIz();
+            const Quaternion& L = body.GetL();
+            const Quaternion& q = body.Getq();
 
             w.row(i) = 1.0/(4*Ixy)*L + 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *q *Quaternion::k();
         }
@@ -157,8 +162,10 @@ private:
         // derivative of the kinetic Hamiltonian wrt. momentum
         VectorArray<N> v;
         for (unsigned i = 0; i < N; i++) {
-            const Vector& p = bodies_[i].Getp();
-            const double& M = bodies_[i].GetM();
+            const Body& body = bodies_[i];
+            const Vector& p = body.Getp();
+            const double& M = body.GetM();
+
             v.row(i) = p/M
                         + PHYS_inv_c2 *(-1.0/(2*M*M*M) *p.squaredNorm()*p);
         }
@@ -174,25 +181,28 @@ private:
 
         VectorArray<N> NegF;
         for (unsigned i = 0; i < N; i++) {
-            const double& M = bodies_[i].GetM();
+            const Body& body = bodies_[i];
+            const double& M = body.GetM();
 
             NegF.row(i) = M*grad_Phi_[i]
                             + PHYS_inv_c2 *(M *Phi_[i]*grad_Phi_[i]);
         }
 
         for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies_[i].Getx();
-            const double& Mx = bodies_[i].GetM();
-            const double& ax = bodies_[i].Geta();
-            const double& J2x = bodies_[i].GetJ2();
-            const Vector epx = bodies_[i].GetPoleAxis();
+            const Body& body_x = bodies_[i];
+            const Vector& x = body_x.Getx();
+            const double& Mx = body_x.GetM();
+            const double& ax = body_x.Geta();
+            const double& J2x = body_x.GetJ2();
+            const Vector epx = body_x.GetPoleAxis();
 
             for (unsigned j = 0; j < i; j++) {
-                const Vector& y = bodies_[j].Getx();
-                const double& My = bodies_[j].GetM();
-                const double& ay = bodies_[j].Geta();
-                const double& J2y = bodies_[j].GetJ2();
-                const Vector epy = bodies_[j].GetPoleAxis();
+                const Body& body_y = bodies_[j];
+                const Vector& y = body_y.Getx();
+                const double& My = body_y.GetM();
+                const double& ay = body_y.Geta();
+                const double& J2y = body_y.GetJ2();
+                const Vector epy = body_y.GetPoleAxis();
 
                 Vector r_vec = x - y;
                 double r = r_vec.norm();
@@ -219,8 +229,10 @@ private:
         // derivative of the kinetic Hamiltonian wrt. angular momentum
         QuaternionArray<N> w;
         for (unsigned i = 0; i < N; i++) {
-            const Quaternion& L = bodies_[i].GetL();
-            const double& Ixy = bodies_[i].GetIxy();
+            const Body& body = bodies_[i];
+            const Quaternion& L = body.GetL();
+            const double& Ixy = body.GetIxy();
+
             w.row(i) = L /(4*Ixy);
         }
 
@@ -233,24 +245,27 @@ private:
         // derivative of the potential Hamiltonian wrt. orientation
         QuaternionArray<N> NegTorque;
         for (unsigned i = 0; i < N; i++) {
-            const Quaternion& q = bodies_[i].Getq();
+            const Body& body = bodies_[i];
+            const Quaternion& q = body.Getq();
 
             NegTorque.row(i) = 2*lambda0_[i] *q;
         }
 
         for (unsigned i = 0; i < N; i++) {
-            const Vector& x = bodies_[i].Getx();
-            const double& Mx = bodies_[i].GetM();
-            const double& ax = bodies_[i].Geta();
-            const double& J2x = bodies_[i].GetJ2();
-            const Vector epx = bodies_[i].GetPoleAxis();
-            const Quaternion& qx = bodies_[i].Getq();
+            const Body& body_x = bodies_[i];
+            const Vector& x = body_x.Getx();
+            const double& Mx = body_x.GetM();
+            const double& ax = body_x.Geta();
+            const double& J2x = body_x.GetJ2();
+            const Vector epx = body_x.GetPoleAxis();
+            const Quaternion& qx = body_x.Getq();
 
             for (unsigned j = 0; j < N; j++) {
                 if (j == i) {continue;}
 
-                const Vector& y = bodies_[j].Getx();
-                const double& My = bodies_[j].GetM();
+                const Body& body_y = bodies_[j];
+                const Vector& y = body_y.Getx();
+                const double& My = body_y.GetM();
 
                 Vector r_vec = x - y;
                 double r = r_vec.norm();
@@ -277,8 +292,9 @@ private:
 
         VectorArray<N> NegF;
         for (unsigned i = 0; i < N; i++) {
-            const double& M = bodies_[i].GetM();
-            const Vector& p = bodies_[i].Getp();
+            const Body& body = bodies_[i];
+            const double& M = body.GetM();
+            const Vector& p = body.Getp();
 
             NegF.row(i) = PHYS_inv_c2 *(4 *grad_Theta_[i]*p + 3.0/(2*M) *grad_Phi_[i]*p.squaredNorm() + M/2 *grad_Lambda_[i]);
         }
@@ -295,8 +311,9 @@ private:
 
         VectorArray<N> v;
         for (unsigned i = 0; i < N; i++) {
-            const double& M = bodies_[i].GetM();
-            const Vector& p = bodies_[i].Getp();
+            const Body& body = bodies_[i];
+            const double& M = body.GetM();
+            const Vector& p = body.Getp();
 
             v.row(i) = PHYS_inv_c2 *(4.0 *Theta_[i] + 3.0/M *Phi_[i]*p);
         }
@@ -311,10 +328,11 @@ private:
 
         QuaternionArray<N> NegTorque;
         for (unsigned i = 0; i < N; i++) {
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-            const Quaternion& L = bodies_[i].GetL();
-            const Quaternion& q = bodies_[i].Getq();
+            const Body& body = bodies_[i];
+            const double& Ixy = body.GetIxy();
+            const double& Iz = body.GetIz();
+            const Quaternion& L = body.GetL();
+            const Quaternion& q = body.Getq();
 
             double lambda = 1.0/(8*Ixy)* L.squaredNorm();
 
@@ -331,10 +349,11 @@ private:
         // derivative of the perturbation Hamiltonian wrt. angular momentum
         QuaternionArray<N> w;
         for (unsigned i = 0; i < N; i++) {
-            const double& Ixy = bodies_[i].GetIxy();
-            const double& Iz = bodies_[i].GetIz();
-            const Quaternion& L = bodies_[i].GetL();
-            const Quaternion& q = bodies_[i].Getq();
+            const Body& body = bodies_[i];
+            const double& Ixy = body.GetIxy();
+            const double& Iz = body.GetIz();
+            const Quaternion& L = body.GetL();
+            const Quaternion& q = body.Getq();
 
             w.row(i) = 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *q *Quaternion::k();
         }
@@ -357,8 +376,9 @@ private:
             for (unsigned j = 0; j < N; j++) {
                 if (j == i) {continue;}
 
-                const double& M = bodies_[j].GetM();
-                const Vector& x = bodies_[j].Getx();
+                const Body& body = bodies_[j];
+                const double& M = body.GetM();
+                const Vector& x = body.Getx();
 
                 Vector r_vec = x0 - x;
                 double r = r_vec.norm();
@@ -386,9 +406,10 @@ private:
             for (unsigned j = 0; j < N; j++) {
                 if (j == i) {continue;}
 
-                const double& M = bodies_[j].GetM();
-                const Vector& x = bodies_[j].Getx();
-                const Vector& p = bodies_[j].Getp();
+                const Body& body = bodies_[j];
+                const double& M = body.GetM();
+                const Vector& x = body.Getx();
+                const Vector& p = body.Getp();
 
                 Vector v = p/M;
 
@@ -415,9 +436,10 @@ private:
             for (unsigned j = 0; j < N; j++) {
                 if (j == i) {continue;}
 
-                const double& M = bodies_[j].GetM();
-                const Vector& x = bodies_[j].Getx();
-                const Vector& p = bodies_[j].Getp();
+                const Body& body = bodies_[j];
+                const double& M = body.GetM();
+                const Vector& x = body.Getx();
+                const Vector& p = body.Getp();
 
                 Vector r_vec = x0 - x;
                 double r = r_vec.norm();
