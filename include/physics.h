@@ -273,7 +273,7 @@ private:
                 double r3_inv = 1/(r*r*r);
                 double epxer = epx.dot(e_r);
 
-                Quaternion negtorque = -6*PHYS_G*Mx*My*r3_inv *J2x*(ax*ax) *epxer *Quaternion::Pure(e_r)*qx*Quaternion::k();
+                Quaternion negtorque = -6*PHYS_G*Mx*My*r3_inv *J2x*(ax*ax) *epxer *(e_r*qx*Quaternion::k());
 
                 NegTorque.row(i) += negtorque;
             }

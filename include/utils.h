@@ -144,10 +144,6 @@ public:
         return this->conjugate() /squared_norm;
     }
 
-    Vector rotate(const Vector& vec) const {
-        return ((*this) * Pure(vec) * this->conjugate()).vector();
-    }
-
     Quaternion operator*(const Quaternion& other) const {
         Quaternion result;
 
@@ -161,11 +157,38 @@ public:
         *this = *this * other;
         return *this;
     }
+
+    Quaternion operator*(const Vector& vec) const {
+        Quaternion result;
+
+        result.scalar() = -this->vector().dot(vec);
+        result.vector() = this->scalar()*vec + this->vector().cross(vec);
+
+        return result;
+    }
+
+    Quaternion& operator*=(const Vector& vec) {
+        *this = *this * vec;
+        return *this;
+    }
+
+    Vector rotate(const Vector& vec) const {
+        return ((*this) * vec * this->conjugate()).vector();
+    }
 };
 
 Quaternion operator*(double scalar, const Quaternion& q) {
-        return q *scalar;
-    }
+    return q *scalar;
+}
+
+Quaternion operator*(const Vector& vec, const Quaternion& q) {
+    Quaternion result;
+
+    result.scalar() = -vec.dot(q.vector());
+    result.vector() = vec*q.scalar() + vec.cross(q.vector());
+
+    return result;
+}
 
 
 template<unsigned N>
