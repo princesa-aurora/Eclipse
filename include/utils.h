@@ -317,8 +317,13 @@ public:
     }
 
 
-    Vector GetAxis() const {
-        return q_.vector().normalized();
+    Vector GetPoleAxis() const {
+        Vector e_z = Vector(0.0, 0.0, 1.0);
+        return q_.rotate(e_z);
+    }
+
+    Vector Getw_phys() const {
+        return 2*(w_*q_.conjugate()).vector();
     }
 
     double GetT_rot() const {
@@ -354,12 +359,12 @@ public:
 
     void Setq(const Quaternion &q) {
         q_ = q;
-        q_.normalize(); // enforce unit quaternion
+        //q_.normalize(); // enforce unit quaternion (actually screws things up)
     }
 
     void Incrementq(const Quaternion &incr_q) {
         q_ += incr_q;
-        q_.normalize(); // enforce unit quaternion
+        //q_.normalize(); // enforce unit quaternion (actually screws things up)
     }
 
     void SetL(const Quaternion &L) {

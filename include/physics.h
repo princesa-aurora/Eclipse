@@ -185,25 +185,25 @@ private:
             const double& Mx = bodies_[i].GetM();
             const double& ax = bodies_[i].Geta();
             const double& J2x = bodies_[i].GetJ2();
-            const Vector ewx = bodies_[i].GetAxis();
+            const Vector epx = bodies_[i].GetPoleAxis();
 
             for (unsigned j = 0; j < i; j++) {
                 const Vector& y = bodies_[j].Getx();
                 const double& My = bodies_[j].GetM();
                 const double& ay = bodies_[j].Geta();
                 const double& J2y = bodies_[j].GetJ2();
-                const Vector ewy = bodies_[j].GetAxis();
+                const Vector epy = bodies_[j].GetPoleAxis();
 
                 Vector r_vec = x - y;
                 double r = r_vec.norm();
                 Vector e_r = r_vec /r;
                 double r2_inv = 1/(r*r);
-                double ewxer = ewx.dot(e_r);
-                double ewyer = ewy.dot(e_r);
+                double epxer = epx.dot(e_r);
+                double epyer = epy.dot(e_r);
 
                 Vector negf = PHYS_G*Mx*My*r2_inv *(
-                    -3*J2x*(ax*ax*r2_inv)*((2.5*ewxer*ewxer - 0.5)*e_r - ewxer*ewx)
-                    -3*J2y*(ay*ay*r2_inv)*((2.5*ewyer*ewyer - 0.5)*e_r - ewyer*ewy));
+                    -3*J2x*(ax*ax*r2_inv)*((2.5*epxer*epxer - 0.5)*e_r - epxer*epx)
+                    -3*J2y*(ay*ay*r2_inv)*((2.5*epyer*epyer - 0.5)*e_r - epyer*epy));
 
                 NegF.row(i) += negf;
                 NegF.row(j) -= negf;
