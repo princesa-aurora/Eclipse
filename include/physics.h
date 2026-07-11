@@ -132,7 +132,9 @@ private:
             const Quaternion& w = body.Getw();
             const Quaternion& q = body.Getq();
 
-            L.row(i) = 4*Ixy*w - 4*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *w).scalar() *q *Quaternion::k();
+            double Re = ((q.conjugate() *w).mult_k()).scalar();
+
+            L.row(i) = 4*Ixy*w - 4*(Iz - Ixy) *Re *q.mult_k();
         }
 
         return L;
@@ -150,7 +152,9 @@ private:
             const Quaternion& L = body.GetL();
             const Quaternion& q = body.Getq();
 
-            w.row(i) = 1.0/(4*Ixy)*L + 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *q *Quaternion::k();
+            double Re = ((q.conjugate() *L).mult_k()).scalar();
+
+            w.row(i) = 1.0/(4*Ixy)*L + 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *Re *q.mult_k();
         }
 
         return w;
@@ -273,7 +277,7 @@ private:
                 double r3_inv = 1/(r*r*r);
                 double epxer = epx.dot(e_r);
 
-                Quaternion negtorque = -6*PHYS_G*Mx*My*r3_inv *J2x*(ax*ax) *epxer *(e_r*qx*Quaternion::k());
+                Quaternion negtorque = -6*PHYS_G*Mx*My*r3_inv *J2x*(ax*ax) *epxer *(e_r*qx).mult_k();
 
                 NegTorque.row(i) += negtorque;
             }
@@ -335,8 +339,9 @@ private:
             const Quaternion& q = body.Getq();
 
             double lambda = 1.0/(8*Ixy)* L.squaredNorm();
+            double Re = ((q.conjugate() *L).mult_k()).scalar();
 
-            NegTorque.row(i) = -1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *L *Quaternion::k()
+            NegTorque.row(i) = -1.0/(4*Ixy*Ixy)*(Iz - Ixy) *Re *L.mult_k()
                             + 2*(lambda - lambda0_[i])*q;
         }
 
@@ -355,7 +360,9 @@ private:
             const Quaternion& L = body.GetL();
             const Quaternion& q = body.Getq();
 
-            w.row(i) = 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *(Quaternion::k() *q.conjugate() *L).scalar() *q *Quaternion::k();
+            double Re = ((q.conjugate() *L).mult_k()).scalar();
+
+            w.row(i) = 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *Re *q.mult_k();
         }
 
         return w;

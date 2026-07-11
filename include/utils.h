@@ -175,6 +175,39 @@ public:
     Vector rotate(const Vector& vec) const {
         return ((*this) * vec * this->conjugate()).vector();
     }
+
+    Quaternion mult_i() const {
+        Quaternion result;
+
+        result.scalar() = -this->vector().x();
+        result.vector().x() = this->scalar();
+        result.vector().y() = this->vector().z();
+        result.vector().z() = -this->vector().y();
+
+        return result;
+    }
+
+    Quaternion mult_j() const {
+        Quaternion result;
+
+        result.scalar() = -this->vector().y();
+        result.vector().x() = -this->vector().z();
+        result.vector().y() = this->scalar();
+        result.vector().z() = this->vector().x();
+
+        return result;
+    }
+
+    Quaternion mult_k() const {
+        Quaternion result;
+
+        result.scalar() = -this->vector().z();
+        result.vector().x() = this->vector().y();
+        result.vector().y() = -this->vector().x();
+        result.vector().z() = this->scalar();
+
+        return result;
+    }
 };
 
 Quaternion operator*(double scalar, const Quaternion& q) {
