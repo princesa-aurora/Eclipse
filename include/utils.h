@@ -38,6 +38,14 @@ public:
         : Base(scal, vec.x(), vec.y(), vec.z()) {}
 
 
+    static Quaternion Real(double scal) {
+        return Quaternion(scal, Vector::Zero());
+    }
+
+    static Quaternion Pure(const Vector& vec) {
+        return Quaternion(0.0, vec);
+    }
+
     static Quaternion Constant(double val) {
         return Quaternion(val, val, val, val);
     }
@@ -45,7 +53,6 @@ public:
     static Quaternion Zero() {
         return Quaternion::Constant(0.0);
     }
-
 
     static Quaternion Identity() {
         return Quaternion(1.0, 0.0, 0.0, 0.0);
@@ -138,7 +145,7 @@ public:
     }
 
     Vector rotate(const Vector& vec) const {
-        return ((*this) * Quaternion(0.0, vec) * this->conjugate()).vector();
+        return ((*this) * Pure(vec) * this->conjugate()).vector();
     }
 
     Quaternion operator*(const Quaternion& other) const {

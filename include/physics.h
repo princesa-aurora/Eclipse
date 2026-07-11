@@ -172,7 +172,7 @@ private:
         // derivative of the potential Hamiltonian wrt. position
         Compute_Phi_grad_Phi();
 
-        VectorArray<N> NegF = VectorArray<N>::Zero();
+        VectorArray<N> NegF;
         for (unsigned i = 0; i < N; i++) {
             const double& M = bodies_[i].GetM();
 
@@ -231,13 +231,39 @@ private:
     QuaternionArray<N> dH_pot_dq()
     {
         // derivative of the potential Hamiltonian wrt. orientation
-        QuaternionArray<N> NegTorque = QuaternionArray<N>::Zero();
-
+        QuaternionArray<N> NegTorque;
         for (unsigned i = 0; i < N; i++) {
             const Quaternion& q = bodies_[i].Getq();
 
-            NegTorque.row(i) = 2*lambda0_[i] *q;            
+            NegTorque.row(i) = 2*lambda0_[i] *q;
         }
+
+        for (unsigned i = 0; i < N; i++) {
+            const Vector& x = bodies_[i].Getx();
+            const double& Mx = bodies_[i].GetM();
+            const double& ax = bodies_[i].Geta();
+            const double& J2x = bodies_[i].GetJ2();
+            const Vector epx = bodies_[i].GetPoleAxis();
+            const Quaternion& qx = bodies_[i].Getq();
+
+            for (unsigned j = 0; j < N; j++) {
+                if (j == i) {continue;}
+
+                const Vector& y = bodies_[j].Getx();
+                const double& My = bodies_[j].GetM();
+
+                Vector r_vec = x - y;
+                double r = r_vec.norm();
+                Vector e_r = r_vec /r;
+                double r3_inv = 1/(r*r*r);
+                double epxer = epx.dot(e_r);
+
+                Quaternion negtorque = -6*PHYS_G*Mx*My*r3_inv *J2x*(ax*ax) *epxer *Quaternion::Pure(e_r)*qx*Quaternion::k();
+
+                NegTorque.row(i) += negtorque;
+            }
+        }
+
         return NegTorque;
     }
 
