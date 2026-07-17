@@ -114,7 +114,7 @@ private:
         QuaternionArray<N> q_mid = q0;
         QuaternionArray<N> L_mid = L0;
 
-        for (unsigned i = 0; i < 2; i++) {
+        for (unsigned i = 0; i < 4; i++) {
             bodies_.Setx(x_mid);
             bodies_.Setp(p_mid);
             bodies_.Setq(q_mid);
