@@ -233,19 +233,21 @@ using QuaternionArray = Eigen::Matrix<double, N, 4>;
 
 
 
-std::pair<Quaternion, Quaternion> angles_to_quaternions(double phi, double alpha, double delta,
-                                double phi_dot, double alpha_dot, double delta_dot) {
+std::pair<Quaternion, Quaternion> angles_to_quaternions(double W, double alpha, double delta,
+                                double W_dot, double alpha_dot, double delta_dot) {
     // represent the orientation angles as a quaternion (and same for the time derivative)
-    Vector axis(cos(delta)*cos(alpha), cos(delta)*sin(alpha), sin(delta));
-    Vector axis_dot(-sin(delta)*delta_dot*cos(alpha) -cos(delta)*sin(alpha)*alpha_dot,
-                    -sin(delta)*delta_dot*sin(alpha) +cos(delta)*cos(alpha)*alpha_dot,
-                     cos(delta)*delta_dot);
+    Quaternion q_W(cos(W/2), 0.0, 0.0, sin(W/2));
+    Quaternion q_delta(cos((M_PI/2 - delta)/2), sin((M_PI/2 - delta)/2), 0.0, 0.0);
+    Quaternion q_alpha(cos(alpha/2), 0.0, 0.0, sin(alpha/2));
 
-    Quaternion q(cos(phi/2), sin(phi/2) *axis);
+    Quaternion q_W_dot(-sin(W/2) *W_dot/2, 0.0, 0.0, cos(W/2) *W_dot/2);
+    Quaternion q_delta_dot(sin((M_PI/2 - delta)/2) *delta_dot/2, -cos((M_PI/2 - delta)/2) *delta_dot/2, 0.0, 0.0);
+    Quaternion q_alpha_dot(-sin(alpha/2) *alpha_dot/2, 0.0, 0.0, cos(alpha/2) *alpha_dot/2);
 
-    Quaternion w(-sin(phi/2) *phi_dot/2, cos(phi/2) *phi_dot/2 *axis + sin(phi/2) *axis_dot);
+    Quaternion q = q_alpha * q_delta * q_W;
+    Quaternion q_dot = q_alpha_dot * q_delta * q_W + q_alpha * q_delta_dot * q_W + q_alpha * q_delta * q_W_dot;
 
-    return {q, w};
+    return {q, q_dot};
 }
 
 
@@ -307,7 +309,7 @@ public:
     i_f_(i_f),
     Iz_(i_f*M*a*a),
     Ixy_(i_f/2.0*M*(a*a+b*b)),
-    J2_(0.0), //J2),
+    J2_(J2),
 
     x_(x0),
     p_(Vector::Constant(NAN)),
