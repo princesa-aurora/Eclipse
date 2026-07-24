@@ -261,6 +261,9 @@ public:
     // value assignment constructor
     heap_array(const T (&init_array)[k]) : data_(init_array, init_array + k) {}
 
+    // constructor from memory adress (to be able to convert from std::array and std::vector)
+    heap_array(const T* T_ptr) : data_(T_ptr, T_ptr + k) {}
+
     // expose standard array methods
     T& operator[](size_t index) {
         return data_[index];

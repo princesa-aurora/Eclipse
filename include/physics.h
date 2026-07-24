@@ -59,6 +59,11 @@ public:
         return bodies_[idx];
     }
 
+    // get all current bodies
+    const BodyArray<N>& GetCurrentBodies() const {
+        return bodies_;
+    }
+
 
 private:
     friend class Forest_Ruth<N>;

@@ -445,6 +445,27 @@ Body Hygiea("Hygiea",
 
 
 
+std::map<std::string, Body> initial_bodies_map{
+                                        {"Sun", Sun},
+                                        {"Mercury", Mercury},
+                                        {"Venus", Venus},
+                                        {"Earth", Earth},
+                                        {"Moon", Moon},
+                                        {"Mars", Mars},
+                                        {"Jupiter", Jupiter},
+                                        {"Saturn", Saturn},
+                                        {"Uranus", Uranus},
+                                        {"Neptune", Neptune},
+                                        {"Pluto", Pluto},
+                                        {"Ceres", Ceres},
+                                        {"Vesta", Vesta},
+                                        {"Pallas", Pallas},
+                                        {"Hygiea", Hygiea}
+};
+
+
+
+
 
 
 #endif // INITIAL_CONDITIONS_H_INCLUDED
