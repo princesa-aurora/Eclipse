@@ -17,6 +17,11 @@
 #define UTILS_H_INCLUDED
 
 
+// some physics constants
+constexpr double PHYS_G = 6.6743015E+04; // km3/(1e24 kg)/s^2, Newtons constant of gravity
+constexpr double PHYS_c = 299792.458; // km/s, speed of light
+constexpr double PHYS_inv_c2 = 1.0/(PHYS_c*PHYS_c); // 1/c^2
+
 
 using Vector = Eigen::Vector3d;
 using Matrix = Eigen::Matrix3d;
@@ -676,7 +681,6 @@ bool eclipsed(const Body &earth, const Body &moon, const Body &sun) {
     Vector x_sun = x_sun_ICRF - x_earth_ICRF;
 
     // we need the retarded positions of the sun and moon (ie corrected for light travel time)
-    double PHYS_c = 299792.458; // remove before merge!!!!
     double t_moon = -1.0/PHYS_c *x_moon.norm();
     double t_sun = -1.0/PHYS_c *x_sun.norm();
     x_moon += v_moon*t_moon;

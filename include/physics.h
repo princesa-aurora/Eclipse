@@ -10,10 +10,6 @@
 #define PHYSICS_H_INCLUDED
 
 
-constexpr double PHYS_G = 6.6743015E+04; // km3/(1e24 kg)/s^2, Newtons constant of gravity
-constexpr double PHYS_c = 299792.458; // km/s, speed of light
-constexpr double PHYS_inv_c2 = 1.0/(PHYS_c*PHYS_c); // 1/c^2
-
 
 // forward declare Forest_Ruth solver class to be visible here (definition is in solver.h)
 template <unsigned N> class Forest_Ruth;
