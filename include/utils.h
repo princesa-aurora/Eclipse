@@ -295,10 +295,13 @@ public:
         std::string name,
 
         double M,
-        double a,
+        double a1,
+        double a2,
         double b,
         double i_f,
         double J2,
+        double J22,
+        double l2,
 
         Vector x0,
         Vector v0,
@@ -306,13 +309,17 @@ public:
         Quaternion w0) :
     name_(name),
     M_(M),
-    a_(a),
+    a1_(a1),
+    a2_(a2),
     b_(b),
-    R_(pow(a*a*b, 1.0/3.0)),
+    A_(sqrt((a1*a1+a2*a2)/2)),
+    R_(cbrt(a1*a2*b)),
     i_f_(i_f),
-    Iz_(i_f*M*a*a),
-    Ixy_(i_f/2.0*M*(a*a+b*b)),
+    Iz_(i_f*M*A_*A_),
+    Ixy_(i_f/2.0*M*(A_*A_+b*b)),
     J2_(J2),
+    J22_(J22),
+    l2_(l2),
 
     x_(x0),
     p_(Vector::Constant(NAN)),
@@ -330,12 +337,20 @@ public:
         return M_;
     }
 
-    double Geta() const {
-        return a_;
+    double Geta1() const {
+        return a1_;
+    }
+
+    double Geta2() const {
+        return a2_;
     }
 
     double Getb() const {
         return b_;
+    }
+
+    double GetA() const {
+        return A_;
     }
 
     double GetR() const {
@@ -356,6 +371,14 @@ public:
 
     double GetJ2() const {
         return J2_;
+    }
+
+    double GetJ22() const {
+        return J22_;
+    }
+
+    double Getl2() const {
+        return l2_;
     }
 
 
@@ -384,6 +407,16 @@ public:
         return w_;
     }
 
+
+    Vector GetMajorEquatorialAxis() const {
+        Vector e_major = Vector(cos(l2_), sin(l2_), 0.0);
+        return q_.rotate(e_major);
+    }
+
+    Vector GetMinorEquatorialAxis() const {
+        Vector e_minor = Vector(-sin(l2_), cos(l2_), 0.0);
+        return q_.rotate(e_minor);
+    }
 
     Vector GetPoleAxis() const {
         Vector e_z = Vector(0.0, 0.0, 1.0);
@@ -458,13 +491,17 @@ private:
 
     // properties of the body
     const double M_; // mass
-    const double a_; // equatorial radius
+    const double a1_; // major equatorial radius
+    const double a2_; // minor equatorial radius
     const double b_; // polar radius
-    const double R_; // volumetric mean radius
+    const double A_; // equatorial rms radius
+    const double R_; // volumetric mean radius (geometric mean of a,b and c)
     const double i_f_; // moment of inertia factor
     const double Iz_; // moment of inertia along polar axis
     const double Ixy_; // moment of inertia along equatorial axes
     const double J2_; // second zonal coefficient
+    const double J22_; // second sectorial coefficient
+    const double l2_; // angle of major equatorial axis to prime meridian
 
     // dynamic variables of the body
     Vector x_; // position
@@ -764,14 +801,14 @@ double utc_date_and_time_to_j2000(std::string date_str, std::string time_str) {
 
 double compute_sun_zenith(double lon, double lat, const Body &earth, const Body &sun) {
     // at lon, lat on earths surface what is the zenith of the sun? // account for oblateness of earth in position vector
-    const double& a_earth = earth.Geta();
+    const double& A_earth = earth.GetA();
     const double& b_earth = earth.Getb();
 
-    double a2 = a_earth*a_earth, b2 = b_earth*b_earth;
+    double A2 = A_earth*A_earth, b2 = b_earth*b_earth;
     double cos_lat = cos(lat), sin_lat = sin(lat);
-    double Z = sqrt(a2*cos_lat*cos_lat + b2*sin_lat*sin_lat);
+    double Z = sqrt(A2*cos_lat*cos_lat + b2*sin_lat*sin_lat);
 
-    Vector pos_on_earth = Vector(a2*cos_lat*cos(lon), a2*cos_lat*sin(lon), b2*sin_lat) /Z;
+    Vector pos_on_earth = Vector(A2*cos_lat*cos(lon), A2*cos_lat*sin(lon), b2*sin_lat) /Z;
     const Quaternion& q_earth = earth.Getq();
     pos_on_earth = q_earth.rotate(pos_on_earth); // rotate from terrestrial frame to ICRF
 
@@ -906,7 +943,7 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
     // thereby ignore day and night, i.e. pretend that one can look through the earth and see the eclipse even though its night
     // (this is just so darkness due to eclipse and darkness due to night are not mixed up)
     // write the results into the provided buffers
-    const double& a_earth = earth.Geta();
+    const double& A_earth = earth.GetA();
     const double& b_earth = earth.Getb();
     const double& R_moon = moon.GetR();
     const double& R_sun = sun.GetR();
@@ -942,10 +979,10 @@ void compute_local_occultations(const Body &earth, const Body &moon,  const Body
         double lat = lat_grid[i];
 
         // convert to position vector
-        double a2 = a_earth*a_earth, b2 = b_earth*b_earth;
+        double A2 = A_earth*A_earth, b2 = b_earth*b_earth;
         double cos_lat = cos(lat), sin_lat = sin(lat);
-        double Z = sqrt(a2*cos_lat*cos_lat + b2*sin_lat*sin_lat);
-        Vector x = Vector(a2*cos_lat*cos(lon), a2*cos_lat*sin(lon), b2*sin_lat) /Z;
+        double Z = sqrt(A2*cos_lat*cos_lat + b2*sin_lat*sin_lat);
+        Vector x = Vector(A2*cos_lat*cos(lon), A2*cos_lat*sin(lon), b2*sin_lat) /Z;
 
         Vector x_s = x_sun - x; // vector from observation point to the sun
         Vector x_m = x_moon - x; // vector from observation point to the moon
