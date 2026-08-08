@@ -69,7 +69,6 @@ private:
 
     heap_array<double, N> Phi_;
     heap_array<Vector, N> Theta_;
-    VectorArray<N> pos_Phi_Theta_;
 
     heap_array<Vector, N> grad_Phi_;
     heap_array<Matrix, N> grad_Theta_;
@@ -79,7 +78,6 @@ private:
     heap_array<double, N> lambda0_;
 
     VectorArray<N> x_cached_Phi_;
-    VectorArray<N> orient_cached_I_;
 
 
     VectorArray<N> p_of_v()
@@ -129,13 +127,14 @@ private:
         for (unsigned i = 0; i < N; i++) {
             const Body& body = bodies_[i];
             const double& Ixy = body.GetIxy();
-            const double& Iz = body.GetIz();
+            const double& dIe = body.GetdIe();
+            const double& dIp = body.GetdIp();
             const Quaternion& w = body.Getw();
             const Quaternion& q = body.Getq();
 
-            double Re = ((q.conjugate() *w).mult_k()).scalar();
+            Quaternion nut = (q.conjugate()*w).scale(0.0, -dIe, dIe, dIp);
 
-            L.row(i) = 4*Ixy*w - 4*(Iz - Ixy) *Re *q.mult_k();
+            L.row(i) = 4*Ixy*w + 2*q*nut;
         }
 
         return L;
@@ -149,13 +148,14 @@ private:
         for (unsigned i = 0; i < N; i++) {
             const Body& body = bodies_[i];
             const double& Ixy = body.GetIxy();
-            const double& Iz = body.GetIz();
+            const double& dIe = body.GetdIe();
+            const double& dIp = body.GetdIp();
             const Quaternion& L = body.GetL();
             const Quaternion& q = body.Getq();
 
-            double Re = ((q.conjugate() *L).mult_k()).scalar();
+            Quaternion nut = (q.conjugate() *L).scale(0.0, -dIe, dIe, dIp);
 
-            w.row(i) = 1.0/(4*Ixy)*L + 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *Re *q.mult_k();
+            w.row(i) = L/(4*Ixy) - 1.0/(8*Ixy*Ixy) *q*nut;
         }
 
         return w;
@@ -197,24 +197,34 @@ private:
             const Body& body_x = bodies_[i];
             const Vector& x = body_x.Getx();
             const double& Mx = body_x.GetM();
-            const double& ax = body_x.Geta();
+            const double& Ax = body_x.GetA();
             const double& J2x = body_x.GetJ2();
+            const double& J22x = body_x.GetJ22();
             const Vector epx = body_x.GetPoleAxis();
+            const Vector ee1x = body_x.GetMajorEquatorialAxis();
+            const Vector ee2x = body_x.GetMinorEquatorialAxis();
 
             for (unsigned j = 0; j < i; j++) {
                 const Body& body_y = bodies_[j];
                 const Vector& y = body_y.Getx();
                 const double& My = body_y.GetM();
-                const double& ay = body_y.Geta();
+                const double& Ay = body_y.GetA();
                 const double& J2y = body_y.GetJ2();
+                const double& J22y = body_y.GetJ22();
                 const Vector epy = body_y.GetPoleAxis();
+                const Vector ee1y = body_y.GetMajorEquatorialAxis();
+                const Vector ee2y = body_y.GetMinorEquatorialAxis();
 
                 Vector r_vec = x - y;
                 double r = r_vec.norm();
                 Vector e_r = r_vec /r;
-                double r2_inv = 1/(r*r);
+                double r4_inv = 1/(r*r*r*r);
                 double epxer = epx.dot(e_r);
                 double epyer = epy.dot(e_r);
+                double ee1xer = ee1x.dot(e_r);
+                double ee2xer = ee2x.dot(e_r);
+                double ee1yer = ee1y.dot(e_r);
+                double ee2yer = ee2y.dot(e_r);
 
                 Vector negf = PHYS_G*Mx*My*r2_inv *(
                     -3*J2x*(ax*ax*r2_inv)*((2.5*epxer*epxer - 0.5)*e_r - epxer*epx)
@@ -260,7 +270,7 @@ private:
             const Body& body_x = bodies_[i];
             const Vector& x = body_x.Getx();
             const double& Mx = body_x.GetM();
-            const double& ax = body_x.Geta();
+            const double& Ax = body_x.GetA();
             const double& J2x = body_x.GetJ2();
             const Vector epx = body_x.GetPoleAxis();
             const Quaternion& qx = body_x.Getq();
@@ -335,14 +345,15 @@ private:
         for (unsigned i = 0; i < N; i++) {
             const Body& body = bodies_[i];
             const double& Ixy = body.GetIxy();
-            const double& Iz = body.GetIz();
+            const double& dIe = body.GetdIe();
+            const double& dIp = body.GetdIp();
             const Quaternion& L = body.GetL();
             const Quaternion& q = body.Getq();
 
             double lambda = 1.0/(8*Ixy)* L.squaredNorm();
-            double Re = ((q.conjugate() *L).mult_k()).scalar();
+            Quaternion nut = (q.conjugate() *L).scale(0.0, -dIe, dIe, dIp);
 
-            NegTorque.row(i) = -1.0/(4*Ixy*Ixy)*(Iz - Ixy) *Re *L.mult_k()
+            NegTorque.row(i) = 1.0/(8*Ixy*Ixy) *L*nut
                             + 2*(lambda - lambda0_[i])*q;
         }
 
@@ -357,13 +368,14 @@ private:
         for (unsigned i = 0; i < N; i++) {
             const Body& body = bodies_[i];
             const double& Ixy = body.GetIxy();
-            const double& Iz = body.GetIz();
+            const double& dIe = body.GetdIe();
+            const double& dIp = body.GetdIp();
             const Quaternion& L = body.GetL();
             const Quaternion& q = body.Getq();
 
-            double Re = ((q.conjugate() *L).mult_k()).scalar();
+            Quaternion nut = (q.conjugate() *L).scale(0.0, -dIe, dIe, dIp);
 
-            w.row(i) = 1.0/(4*Ixy*Ixy)*(Iz - Ixy) *Re *q.mult_k();
+            w.row(i) = -1.0/(8*Ixy*Ixy) *q*nut;
         }
 
         return w;
