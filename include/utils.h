@@ -121,12 +121,30 @@ public:
         return *this;
     }
 
+    Quaternion operator*(int scalar) const {
+        return Quaternion(this->Base::operator*(scalar));
+    }
+
+    Quaternion& operator*=(int scalar) {
+        this->Base::operator*=(scalar);
+        return *this;
+    }
+
     Quaternion operator*(double scalar) const {
         return Quaternion(this->Base::operator*(scalar));
     }
 
     Quaternion& operator*=(double scalar) {
         this->Base::operator*=(scalar);
+        return *this;
+    }
+
+    Quaternion operator/(int scalar) const {
+        return Quaternion(this->Base::operator/(scalar));
+    }
+
+    Quaternion& operator/=(int scalar) {
+        this->Base::operator/=(scalar);
         return *this;
     }
 
@@ -213,7 +231,15 @@ public:
 
         return result;
     }
+
+    Quaternion scale(double scal, double x, double y, double z) const {
+        return Quaternion((*this)(0)*scal, (*this)(1)*x, (*this)(2)*y, (*this)(3)*z);
+    }
 };
+
+Quaternion operator*(int scalar, const Quaternion& q) {
+    return q *scalar;
+}
 
 Quaternion operator*(double scalar, const Quaternion& q) {
     return q *scalar;
