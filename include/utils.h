@@ -241,12 +241,12 @@ using QuaternionArray = Eigen::Matrix<double, N, 4>;
 std::pair<Quaternion, Quaternion> angles_to_quaternions(double W, double alpha, double delta,
                                 double W_dot, double alpha_dot, double delta_dot) {
     // represent the orientation angles as a quaternion (and same for the time derivative)
-    Quaternion q_W(cos(W/2), 0.0, 0.0, sin(W/2));
-    Quaternion q_delta(cos((M_PI/2 - delta)/2), sin((M_PI/2 - delta)/2), 0.0, 0.0);
+    Quaternion q_W(cos((W + M_PI/2)/2), 0.0, 0.0, sin((W + M_PI/2)/2));
+    Quaternion q_delta(cos((M_PI/2 - delta)/2), 0.0, sin((M_PI/2 - delta)/2), 0.0);
     Quaternion q_alpha(cos(alpha/2), 0.0, 0.0, sin(alpha/2));
 
-    Quaternion q_W_dot(-sin(W/2) *W_dot/2, 0.0, 0.0, cos(W/2) *W_dot/2);
-    Quaternion q_delta_dot(sin((M_PI/2 - delta)/2) *delta_dot/2, -cos((M_PI/2 - delta)/2) *delta_dot/2, 0.0, 0.0);
+    Quaternion q_W_dot(-sin((W + M_PI/2)/2) *W_dot/2, 0.0, 0.0, cos((W + M_PI/2)/2) *W_dot/2);
+    Quaternion q_delta_dot(sin((M_PI/2 - delta)/2) *delta_dot/2, 0.0, -cos((M_PI/2 - delta)/2) *delta_dot/2, 0.0);
     Quaternion q_alpha_dot(-sin(alpha/2) *alpha_dot/2, 0.0, 0.0, cos(alpha/2) *alpha_dot/2);
 
     Quaternion q = q_alpha * q_delta * q_W;
