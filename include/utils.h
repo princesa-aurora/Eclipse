@@ -346,8 +346,12 @@ public:
     A_(sqrt((a1*a1+a2*a2)/2)),
     R_(cbrt(a1*a2*b)),
     i_f_(i_f),
+    Ix_(i_f/2*M*(a2*a2+b*b)),
+    Iy_(i_f/2*M*(a1*a1+b*b)),
     Iz_(i_f*M*A_*A_),
-    Ixy_(i_f/2.0*M*(A_*A_+b*b)),
+    Ixy_((Ix_+Iy_)/2),
+    dIe_(Iy_-Ix_),
+    dIp_(2*Iz_-Ix_-Iy_),
     J2_(J2),
     J22_(J22),
     l2_(l2),
@@ -392,12 +396,28 @@ public:
         return i_f_;
     }
 
+    double GetIx() const {
+        return Ix_;
+    }
+
+    double GetIy() const {
+        return Iy_;
+    }
+
     double GetIz() const {
         return Iz_;
     }
 
     double GetIxy() const {
         return Ixy_;
+    }
+
+    double GetdIe() const {
+        return dIe_;
+    }
+
+    double GetdIp() const {
+        return dIp_;
     }
 
     double GetJ2() const {
@@ -528,8 +548,12 @@ private:
     const double A_; // equatorial rms radius
     const double R_; // volumetric mean radius (geometric mean of a,b and c)
     const double i_f_; // moment of inertia factor
+    const double Ix_; // moment of inertia along major equatorial axis
+    const double Iy_; // moment of inertia along minor equatorial axis
     const double Iz_; // moment of inertia along polar axis
     const double Ixy_; // moment of inertia along equatorial axes
+    const double dIe_; // Iy - Ix
+    const double dIp_; // 2*Iz - Ix - Iy
     const double J2_; // second zonal coefficient
     const double J22_; // second sectorial coefficient
     const double l2_; // angle of major equatorial axis to prime meridian
