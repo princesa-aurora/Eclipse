@@ -226,9 +226,14 @@ private:
                 double ee1yer = ee1y.dot(e_r);
                 double ee2yer = ee2y.dot(e_r);
 
-                Vector negf = PHYS_G*Mx*My*r2_inv *(
-                    -3*J2x*(ax*ax*r2_inv)*((2.5*epxer*epxer - 0.5)*e_r - epxer*epx)
-                    -3*J2y*(ay*ay*r2_inv)*((2.5*epyer*epyer - 0.5)*e_r - epyer*epy));
+                Vector negf = -1.5*PHYS_G*Mx*My*r4_inv *(
+
+                    + J2x*(Ax*Ax)*((5*epxer*epxer - 1)*e_r - 2*epxer*epx)
+                    + J2y*(Ay*Ay)*((5*epyer*epyer - 1)*e_r - 2*epyer*epy)
+
+                    + 2*J22x*(Ax*Ax) *(-5*(ee1xer*ee1xer)*e_r + 2*ee1xer*ee1x + 5*(ee2xer*ee2xer)*e_r - 2*ee2xer*ee2x)
+                    + 2*J22y*(Ay*Ay) *(-5*(ee1yer*ee1yer)*e_r + 2*ee1yer*ee1y + 5*(ee2yer*ee2yer)*e_r - 2*ee2yer*ee2y)
+                );
 
                 NegF.row(i) += negf;
                 NegF.row(j) -= negf;
@@ -272,7 +277,11 @@ private:
             const double& Mx = body_x.GetM();
             const double& Ax = body_x.GetA();
             const double& J2x = body_x.GetJ2();
+            const double& J22x = body_x.GetJ22();
+            const double& l2x = body_x.Getl2();
             const Vector epx = body_x.GetPoleAxis();
+            const Vector ee1x = body_x.GetMajorEquatorialAxis();
+            const Vector ee2x = body_x.GetMinorEquatorialAxis();
             const Quaternion& qx = body_x.Getq();
 
             for (unsigned j = 0; j < N; j++) {
@@ -287,8 +296,17 @@ private:
                 Vector e_r = r_vec /r;
                 double r3_inv = 1/(r*r*r);
                 double epxer = epx.dot(e_r);
+                double ee1xer = ee1x.dot(e_r);
+                double ee2xer = ee2x.dot(e_r);
 
-                Quaternion negtorque = -6*PHYS_G*Mx*My*r3_inv *J2x*(ax*ax) *epxer *(e_r*qx).mult_k();
+                Quaternion erqx = e_r*qx;
+
+                Quaternion negtorque = -6*PHYS_G*Mx*My*r3_inv *(
+
+                    + J2x*(Ax*Ax) *epxer *erqx.mult_k()
+
+                    - 2*J22x*(Ax*Ax) *(ee1xer*(cos(l2x)*erqx.mult_i() + sin(l2x)*erqx.mult_j()) - ee2xer*(-sin(l2x)*erqx.mult_i() + cos(l2x)*erqx.mult_j()))
+                );
 
                 NegTorque.row(i) += negtorque;
             }
